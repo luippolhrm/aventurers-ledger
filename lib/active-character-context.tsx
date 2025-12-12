@@ -39,16 +39,26 @@ export function ActiveCharacterProvider({ children }: { children: ReactNode }) {
     } else {
       setActiveCharacter(null)
     }
-  }, [activeCharacterId])
+  }, [activeCharacterId, refreshTrigger])
 
   const loadCharacter = async (id: string) => {
     try {
       const supabase = createBrowserClient()
-      const { data, error } = await supabase.from("characters").select("*").eq("id", id).single()
+      const { data, error } = await supabase.from("characters").select("*").eq("id", id).maybeSingle()
 
       if (error) {
-        console.error("[v0] Error loading active character:", error)
+        console.error("[v0] Error loading active character:", error.message)
         setActiveCharacter(null)
+        localStorage.removeItem("activeCharacterId")
+        setActiveCharacterId(null)
+        return
+      }
+
+      if (!data) {
+        console.log("[v0] Character not found:", id)
+        setActiveCharacter(null)
+        localStorage.removeItem("activeCharacterId")
+        setActiveCharacterId(null)
         return
       }
 
@@ -56,10 +66,11 @@ export function ActiveCharacterProvider({ children }: { children: ReactNode }) {
     } catch (error) {
       console.error("[v0] Error in loadCharacter:", error)
       setActiveCharacter(null)
+      localStorage.removeItem("activeCharacterId")
+      setActiveCharacterId(null)
     }
   }
 
-  // Save active character to localStorage when it changes
   const handleSetActiveCharacter = (id: string | null) => {
     setActiveCharacterId(id)
     if (id) {

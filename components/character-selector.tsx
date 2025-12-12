@@ -19,6 +19,7 @@ interface Character {
   id: string
   name: string
   race: string
+  archived: boolean
 }
 
 interface CharacterSelectorProps {
@@ -46,7 +47,7 @@ export function CharacterSelector({ language, onNavigateToCharacters }: Characte
   const loadCharacters = async () => {
     try {
       const supabase = createBrowserClient()
-      const { data, error } = await supabase.from("characters").select("*").order("created_at")
+      const { data, error } = await supabase.from("characters").select("*").eq("archived", false).order("created_at")
 
       if (error) throw error
 
@@ -69,12 +70,12 @@ export function CharacterSelector({ language, onNavigateToCharacters }: Characte
       <DropdownMenuTrigger asChild>
         <Button variant="outline" className="gap-2 bg-transparent">
           <User className="w-4 h-4" />
-          <span className="hidden sm:inline">{activeCharacter?.name || "Select Character"}</span>
+          <span className="hidden sm:inline">{activeCharacter?.name || t.characterSelector.selectCharacter}</span>
           <ChevronDown className="w-4 h-4" />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-56">
-        <DropdownMenuLabel>Active Character</DropdownMenuLabel>
+        <DropdownMenuLabel>{t.characterSelector.activeCharacter}</DropdownMenuLabel>
         <DropdownMenuSeparator />
         {characters.map((char) => (
           <DropdownMenuItem
@@ -91,7 +92,7 @@ export function CharacterSelector({ language, onNavigateToCharacters }: Characte
         <DropdownMenuSeparator />
         <DropdownMenuItem onClick={onNavigateToCharacters}>
           <User className="w-4 h-4 mr-2" />
-          Manage Characters
+          {t.characterSelector.manageCharacters}
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

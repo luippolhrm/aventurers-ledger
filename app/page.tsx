@@ -2,15 +2,15 @@
 
 import { useState, useEffect } from "react"
 import { CurrencyExchangeCard } from "@/components/currency-exchange-card"
-import { WalletManager } from "@/components/wallet-manager"
-import { CharactersList } from "@/components/characters-list"
+import { CharactersUnified } from "@/components/characters-unified"
 import { WelcomeDashboard } from "@/components/welcome-dashboard"
 import { LanguageSelector } from "@/components/language-selector"
 import { CharacterSelector } from "@/components/character-selector"
 import { Sidebar } from "@/components/sidebar"
-import { Movements } from "@/components/movements"
 import { ActiveCharacterProvider } from "@/lib/active-character-context"
 import { type Language, translations } from "@/lib/translations"
+import { Finances } from "@/components/finances"
+import { Inventory } from "@/components/inventory"
 
 function getBrowserLanguage(): Language {
   if (typeof window === "undefined") return "en"
@@ -51,10 +51,10 @@ function HomeContent() {
 
         <main className="flex-1 flex items-center justify-center p-4 md:p-8">
           {activeModule === "welcome" && <WelcomeDashboard language={language} onNavigate={setActiveModule} />}
-          {activeModule === "characters" && <CharactersList language={language} />}
+          {activeModule === "characters" && <CharactersUnified language={language} />}
           {activeModule === "currency-converter" && <CurrencyExchangeCard language={language} />}
-          {activeModule === "wallet" && <WalletManager language={language} />}
-          {activeModule === "movements" && <Movements language={language} />}
+          {activeModule === "finances" && <Finances language={language} />}
+          {activeModule === "inventory" && <Inventory language={language} />}
         </main>
 
         <footer className="py-6 px-4 text-center text-sm text-muted-foreground border-t border-border">

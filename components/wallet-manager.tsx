@@ -122,8 +122,8 @@ export function WalletManager({ language }: WalletManagerProps) {
         character_id: activeCharacter.id,
         from_currency: currency,
         to_currency: currency,
-        amount_from: movementType === "add" ? amount : -amount,
-        amount_to: movementType === "add" ? amount : -amount,
+        amount_from: amount, // Always positive
+        amount_to: amount, // Always positive
         movement_type: movementType,
       })
 

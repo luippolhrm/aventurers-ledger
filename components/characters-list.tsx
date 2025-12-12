@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   Dialog,
   DialogContent,
@@ -18,7 +19,7 @@ import {
 import { createBrowserClient } from "@/lib/supabase/client"
 import { useActiveCharacter } from "@/lib/active-character-context"
 import { type Language, translations } from "@/lib/translations"
-import { UserPlus, Edit, Trash2, Loader2, User } from "lucide-react"
+import { UserPlus, Edit, Archive, Loader2, User, RotateCcw } from "lucide-react"
 
 interface CharactersListProps {
   language: Language
@@ -29,10 +30,12 @@ interface Character {
   name: string
   race: string
   created_at: string
+  archived: boolean
 }
 
 export function CharactersList({ language }: CharactersListProps) {
   const [characters, setCharacters] = useState<Character[]>([])
+  const [archivedCharacters, setArchivedCharacters] = useState<Character[]>([])
   const [loading, setLoading] = useState(true)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [editingCharacter, setEditingCharacter] = useState<Character | null>(null)
@@ -51,14 +54,28 @@ export function CharactersList({ language }: CharactersListProps) {
     setLoading(true)
     try {
       const supabase = createBrowserClient()
-      const { data, error } = await supabase.from("characters").select("*").order("created_at", { ascending: true })
 
-      if (error) throw error
+      const { data: activeData, error: activeError } = await supabase
+        .from("characters")
+        .select("*")
+        .eq("archived", false)
+        .order("created_at", { ascending: true })
 
-      setCharacters(data || [])
+      if (activeError) throw activeError
 
-      if (!activeCharacterId && data && data.length > 0) {
-        setActiveCharacterId(data[0].id)
+      const { data: archivedData, error: archivedError } = await supabase
+        .from("characters")
+        .select("*")
+        .eq("archived", true)
+        .order("created_at", { ascending: true })
+
+      if (archivedError) throw archivedError
+
+      setCharacters(activeData || [])
+      setArchivedCharacters(archivedData || [])
+
+      if (!activeCharacterId && activeData && activeData.length > 0) {
+        setActiveCharacterId(activeData[0].id)
       }
     } catch (error) {
       console.error("[v0] Error loading characters:", error)
@@ -111,6 +128,7 @@ export function CharactersList({ language }: CharactersListProps) {
           .insert({
             name: characterName.trim(),
             race: race.trim(),
+            archived: false,
           })
           .select()
           .single()
@@ -153,14 +171,14 @@ export function CharactersList({ language }: CharactersListProps) {
     }
   }
 
-  const handleDelete = async (character: Character) => {
-    if (!confirm(`Delete ${character.name}? This action cannot be undone.`)) {
+  const handleArchive = async (character: Character) => {
+    if (!confirm(t.character.archiveConfirm)) {
       return
     }
 
     try {
       const supabase = createBrowserClient()
-      const { error } = await supabase.from("characters").delete().eq("id", character.id)
+      const { error } = await supabase.from("characters").update({ archived: true }).eq("id", character.id)
 
       if (error) throw error
 
@@ -169,10 +187,40 @@ export function CharactersList({ language }: CharactersListProps) {
         setActiveCharacterId(remaining.length > 0 ? remaining[0].id : null)
       }
 
+      setMessage({ type: "success", text: t.character.archiveSuccess })
       await loadCharacters()
       triggerRefresh()
+
+      setTimeout(() => {
+        setMessage(null)
+      }, 2000)
     } catch (error) {
-      console.error("[v0] Error deleting character:", error)
+      console.error("[v0] Error archiving character:", error)
+      setMessage({ type: "error", text: t.character.error })
+    }
+  }
+
+  const handleRestore = async (character: Character) => {
+    if (!confirm(t.character.restoreConfirm)) {
+      return
+    }
+
+    try {
+      const supabase = createBrowserClient()
+      const { error } = await supabase.from("characters").update({ archived: false }).eq("id", character.id)
+
+      if (error) throw error
+
+      setMessage({ type: "success", text: t.character.restoreSuccess })
+      await loadCharacters()
+      triggerRefresh()
+
+      setTimeout(() => {
+        setMessage(null)
+      }, 2000)
+    } catch (error) {
+      console.error("[v0] Error restoring character:", error)
+      setMessage({ type: "error", text: t.character.error })
     }
   }
 
@@ -204,52 +252,110 @@ export function CharactersList({ language }: CharactersListProps) {
           </div>
         </CardHeader>
         <CardContent>
-          {characters.length === 0 ? (
-            <div className="text-center py-12">
-              <div className="mx-auto mb-4 w-16 h-16 rounded-full bg-muted flex items-center justify-center">
-                <User className="w-8 h-8 text-muted-foreground" />
-              </div>
-              <h3 className="text-lg font-semibold mb-2">{t.character.noCharactersYet}</h3>
-              <p className="text-muted-foreground mb-6">{t.character.createFirstInfo}</p>
-              <Button onClick={openCreateDialog} className="gap-2">
-                <UserPlus className="w-4 h-4" />
-                {t.character.createCharacter}
-              </Button>
-            </div>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>{t.character.characterName}</TableHead>
-                  <TableHead>{t.character.race}</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {characters.map((character) => (
-                  <TableRow key={character.id} className={character.id === activeCharacterId ? "bg-accent/50" : ""}>
-                    <TableCell className="font-medium">{character.name}</TableCell>
-                    <TableCell>{character.race}</TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex justify-end gap-2">
-                        <Button variant="outline" size="sm" onClick={() => openEditDialog(character)}>
-                          <Edit className="w-4 h-4" />
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleDelete(character)}
-                          disabled={character.id === activeCharacterId && characters.length === 1}
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+          {message && !isDialogOpen && (
+            <Alert variant={message.type === "error" ? "destructive" : "default"} className="mb-4">
+              <AlertDescription>{message.text}</AlertDescription>
+            </Alert>
           )}
+
+          <Tabs defaultValue="active" className="w-full">
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger value="active">{t.character.activeCharacters}</TabsTrigger>
+              <TabsTrigger value="archived">{t.character.archivedCharacters}</TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="active">
+              {characters.length === 0 ? (
+                <div className="text-center py-12">
+                  <div className="mx-auto mb-4 w-16 h-16 rounded-full bg-muted flex items-center justify-center">
+                    <User className="w-8 h-8 text-muted-foreground" />
+                  </div>
+                  <h3 className="text-lg font-semibold mb-2">{t.character.noCharactersYet}</h3>
+                  <p className="text-muted-foreground mb-6">{t.character.noActiveCharacters}</p>
+                  <Button onClick={openCreateDialog} className="gap-2">
+                    <UserPlus className="w-4 h-4" />
+                    {t.character.createCharacter}
+                  </Button>
+                </div>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>{t.character.characterName}</TableHead>
+                      <TableHead>{t.character.race}</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {characters.map((character) => (
+                      <TableRow key={character.id} className={character.id === activeCharacterId ? "bg-accent/50" : ""}>
+                        <TableCell className="font-medium">{character.name}</TableCell>
+                        <TableCell>{character.race}</TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex justify-end gap-2">
+                            <Button variant="outline" size="sm" onClick={() => openEditDialog(character)}>
+                              <Edit className="w-4 h-4" />
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleArchive(character)}
+                              disabled={character.id === activeCharacterId && characters.length === 1}
+                              title={t.character.archive}
+                            >
+                              <Archive className="w-4 h-4" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </TabsContent>
+
+            <TabsContent value="archived">
+              {archivedCharacters.length === 0 ? (
+                <div className="text-center py-12">
+                  <div className="mx-auto mb-4 w-16 h-16 rounded-full bg-muted flex items-center justify-center">
+                    <Archive className="w-8 h-8 text-muted-foreground" />
+                  </div>
+                  <h3 className="text-lg font-semibold mb-2">{t.character.noArchivedCharacters}</h3>
+                  <p className="text-muted-foreground">Archived characters will appear here</p>
+                </div>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>{t.character.characterName}</TableHead>
+                      <TableHead>{t.character.race}</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {archivedCharacters.map((character) => (
+                      <TableRow key={character.id}>
+                        <TableCell className="font-medium text-muted-foreground">{character.name}</TableCell>
+                        <TableCell className="text-muted-foreground">{character.race}</TableCell>
+                        <TableCell className="text-right">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleRestore(character)}
+                            title={t.character.restore}
+                            className="gap-2"
+                          >
+                            <RotateCcw className="w-4 h-4" />
+                            {t.character.restore}
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </TabsContent>
+          </Tabs>
         </CardContent>
       </Card>
 

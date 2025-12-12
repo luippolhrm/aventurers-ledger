@@ -113,7 +113,7 @@ export function WelcomeDashboard({ language, onNavigate }: WelcomeDashboardProps
           <CardTitle>{t.welcome.title}</CardTitle>
         </CardHeader>
         <CardContent>
-          <p className="text-muted-foreground">Loading...</p>
+          <p className="text-muted-foreground">{t.welcome.loading}</p>
         </CardContent>
       </Card>
     )
@@ -157,7 +157,7 @@ export function WelcomeDashboard({ language, onNavigate }: WelcomeDashboardProps
               </div>
               <div>
                 <CardTitle>{t.welcome.characterSummary}</CardTitle>
-                <CardDescription>Your adventurer details</CardDescription>
+                <CardDescription>{t.welcome.adventurerDetails}</CardDescription>
               </div>
             </div>
           </CardHeader>
@@ -187,7 +187,7 @@ export function WelcomeDashboard({ language, onNavigate }: WelcomeDashboardProps
               </div>
               <div>
                 <CardTitle>{t.welcome.wealthSummary}</CardTitle>
-                <CardDescription>Your coin collection</CardDescription>
+                <CardDescription>{t.welcome.coinCollection}</CardDescription>
               </div>
             </div>
           </CardHeader>
@@ -224,7 +224,7 @@ export function WelcomeDashboard({ language, onNavigate }: WelcomeDashboardProps
               </>
             ) : (
               <Alert>
-                <AlertDescription>No wallet data found. Visit the Wallet Manager to initialize.</AlertDescription>
+                <AlertDescription>{t.welcome.noWalletData}</AlertDescription>
               </Alert>
             )}
           </CardContent>

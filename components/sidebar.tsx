@@ -1,7 +1,7 @@
 "use client"
 
 import { cn } from "@/lib/utils"
-import { Coins, Menu, X, Wallet, User, Home, ArrowLeftRight } from "lucide-react"
+import { Coins, Menu, X, Users, Home, DollarSign, Package } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useState } from "react"
 import { type Language, translations } from "@/lib/translations"
@@ -24,18 +24,18 @@ export function Sidebar({ activeModule, onModuleChange, language }: SidebarProps
     },
     {
       id: "characters",
-      name: t.sidebar.character + "s",
-      icon: User,
+      name: t.sidebar.characters,
+      icon: Users,
     },
     {
-      id: "wallet",
-      name: t.sidebar.wallet,
-      icon: Wallet,
+      id: "finances",
+      name: t.sidebar.finances,
+      icon: DollarSign,
     },
     {
-      id: "movements",
-      name: t.sidebar.movements,
-      icon: ArrowLeftRight,
+      id: "inventory",
+      name: t.sidebar.inventory,
+      icon: Package,
     },
     {
       id: "currency-converter",

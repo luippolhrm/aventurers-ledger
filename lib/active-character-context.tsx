@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useState, useEffect, type ReactNode } from "react"
 import { createBrowserClient } from "@/lib/supabase/client"
+import { useAuth } from "@/lib/auth-context"
 
 interface Character {
   id: string
@@ -25,6 +26,7 @@ export function ActiveCharacterProvider({ children }: { children: ReactNode }) {
   const [activeCharacterId, setActiveCharacterId] = useState<string | null>(null)
   const [activeCharacter, setActiveCharacter] = useState<Character | null>(null)
   const [refreshTrigger, setRefreshTrigger] = useState(0)
+  const { user, loading: authLoading } = useAuth()
 
   useEffect(() => {
     const stored = localStorage.getItem("activeCharacterId")
@@ -34,12 +36,23 @@ export function ActiveCharacterProvider({ children }: { children: ReactNode }) {
   }, [])
 
   useEffect(() => {
+    if (authLoading) {
+      return // Wait for auth to load
+    }
+
+    if (!user) {
+      setActiveCharacter(null)
+      setActiveCharacterId(null)
+      localStorage.removeItem("activeCharacterId")
+      return
+    }
+
     if (activeCharacterId) {
       loadCharacter(activeCharacterId)
     } else {
       setActiveCharacter(null)
     }
-  }, [activeCharacterId, refreshTrigger])
+  }, [activeCharacterId, refreshTrigger, user, authLoading])
 
   const loadCharacter = async (id: string) => {
     try {
@@ -55,7 +68,6 @@ export function ActiveCharacterProvider({ children }: { children: ReactNode }) {
       }
 
       if (!data) {
-        console.log("[v0] Character not found:", id)
         setActiveCharacter(null)
         localStorage.removeItem("activeCharacterId")
         setActiveCharacterId(null)

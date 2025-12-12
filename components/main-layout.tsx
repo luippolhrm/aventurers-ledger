@@ -6,6 +6,7 @@ import { CharactersUnified } from "@/components/characters-unified"
 import { WelcomeDashboard } from "@/components/welcome-dashboard"
 import { CharacterSelector } from "@/components/character-selector"
 import { LanguageSelector } from "@/components/language-selector"
+import { UserMenu } from "@/components/user-menu"
 import { Sidebar } from "@/components/sidebar"
 import { Finances } from "@/components/finances"
 import { Inventory } from "@/components/inventory"
@@ -24,6 +25,7 @@ export function MainLayout() {
           <div className="absolute top-4 right-4 flex items-center gap-3">
             <CharacterSelector language={language} onNavigateToCharacters={() => setActiveModule("characters")} />
             <LanguageSelector language={language} onLanguageChange={setLanguage} />
+            <UserMenu />
           </div>
 
           <h1 className="text-2xl md:text-3xl font-bold text-balance mb-2 text-foreground">{t.header.title}</h1>

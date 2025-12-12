@@ -18,6 +18,8 @@ interface Character {
   id: string
   name: string
   race: string
+  level?: number
+  class?: string
 }
 
 interface WalletData {
@@ -48,6 +50,7 @@ export function WelcomeDashboard({ language, onNavigate }: WelcomeDashboardProps
 
   useEffect(() => {
     if (activeCharacter) {
+      console.log("[v0] Dashboard: Active character changed:", activeCharacter)
       loadData()
     } else {
       setCharacter(null)
@@ -65,6 +68,7 @@ export function WelcomeDashboard({ language, onNavigate }: WelcomeDashboardProps
 
     try {
       const supabase = createBrowserClient()
+      console.log("[v0] Dashboard: Setting character from activeCharacter:", activeCharacter)
       setCharacter(activeCharacter)
 
       const { data: walletData, error: walletError } = await supabase
@@ -171,6 +175,18 @@ export function WelcomeDashboard({ language, onNavigate }: WelcomeDashboardProps
                 <span className="text-sm font-medium text-muted-foreground">{t.welcome.characterRace}</span>
                 <span className="font-semibold">{character.race}</span>
               </div>
+              {character.level && (
+                <div className="flex justify-between items-center p-3 bg-muted rounded-lg">
+                  <span className="text-sm font-medium text-muted-foreground">{t.welcome.characterLevel}</span>
+                  <span className="font-semibold">{character.level}</span>
+                </div>
+              )}
+              {character.class && (
+                <div className="flex justify-between items-center p-3 bg-muted rounded-lg">
+                  <span className="text-sm font-medium text-muted-foreground">{t.welcome.characterClass}</span>
+                  <span className="font-semibold">{character.class}</span>
+                </div>
+              )}
             </div>
             <Button variant="outline" className="w-full gap-2 bg-transparent" onClick={() => onNavigate("character")}>
               <User className="w-4 h-4" />
@@ -191,7 +207,7 @@ export function WelcomeDashboard({ language, onNavigate }: WelcomeDashboardProps
               </div>
             </div>
           </CardHeader>
-          <CardContent className="space-y-4">
+          <CardContent>
             {wallet ? (
               <>
                 <div className="p-4 bg-gradient-to-br from-accent/20 to-primary/20 rounded-lg text-center">

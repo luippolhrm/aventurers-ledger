@@ -10,14 +10,6 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
 import { createBrowserClient } from "@/lib/supabase/client"
 import { useActiveCharacter } from "@/lib/active-character-context"
 import { type Language, translations } from "@/lib/translations"
@@ -66,7 +58,7 @@ interface Character {
   archived: boolean
 }
 
-type ViewMode = "list" | "profile"
+type ViewMode = "list" | "view" | "edit"
 
 export function CharactersUnified({ language }: CharactersUnifiedProps) {
   const [viewMode, setViewMode] = useState<ViewMode>("list")
@@ -78,6 +70,8 @@ export function CharactersUnified({ language }: CharactersUnifiedProps) {
   const [editingCharacter, setEditingCharacter] = useState<Character | null>(null)
   const [characterName, setCharacterName] = useState("")
   const [race, setRace] = useState("")
+  const [characterClass, setCharacterClass] = useState("")
+  const [level, setLevel] = useState<number>(1)
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null)
   const [saving, setSaving] = useState(false)
   const { activeCharacterId, setActiveCharacterId, triggerRefresh } = useActiveCharacter()
@@ -88,8 +82,8 @@ export function CharactersUnified({ language }: CharactersUnifiedProps) {
   }, [])
 
   useEffect(() => {
-    if (viewMode === "profile" && activeCharacterId) {
-      loadSelectedCharacter(activeCharacterId)
+    if (viewMode === "view" || viewMode === "edit" || activeCharacterId) {
+      loadSelectedCharacter(activeCharacterId || "")
     }
   }, [viewMode, activeCharacterId])
 
@@ -143,6 +137,8 @@ export function CharactersUnified({ language }: CharactersUnifiedProps) {
     setEditingCharacter(null)
     setCharacterName("")
     setRace("")
+    setCharacterClass("")
+    setLevel(1)
     setMessage(null)
     setIsDialogOpen(true)
   }
@@ -151,6 +147,8 @@ export function CharactersUnified({ language }: CharactersUnifiedProps) {
     setEditingCharacter(character)
     setCharacterName(character.name)
     setRace(character.race)
+    setCharacterClass(character.class || "")
+    setLevel(character.level || 1)
     setMessage(null)
     setIsDialogOpen(true)
   }
@@ -171,6 +169,8 @@ export function CharactersUnified({ language }: CharactersUnifiedProps) {
           .update({
             name: characterName.trim(),
             race: race.trim(),
+            class: characterClass.trim() || null,
+            level: level || null,
           })
           .eq("id", editingCharacter.id)
 
@@ -183,6 +183,8 @@ export function CharactersUnified({ language }: CharactersUnifiedProps) {
           .insert({
             name: characterName.trim(),
             race: race.trim(),
+            class: characterClass.trim() || null,
+            level: level || null,
             archived: false,
           })
           .select()
@@ -281,20 +283,30 @@ export function CharactersUnified({ language }: CharactersUnifiedProps) {
 
   const handleViewProfile = (character: Character) => {
     setActiveCharacterId(character.id)
-    setViewMode("profile")
+    setViewMode("view")
+  }
+
+  const handleEditProfile = (character: Character) => {
+    setActiveCharacterId(character.id)
+    setViewMode("edit")
   }
 
   const handleUpdateProfile = async () => {
     if (!selectedCharacter || !activeCharacterId) return
 
     try {
+      console.log("[v0] Saving character profile:", selectedCharacter)
+      console.log("[v0] Level value:", selectedCharacter.level, "Type:", typeof selectedCharacter.level)
+
       const supabase = createBrowserClient()
       const { error } = await supabase.from("characters").update(selectedCharacter).eq("id", activeCharacterId)
 
       if (error) throw error
 
+      console.log("[v0] Profile saved successfully")
       setMessage({ type: "success", text: t.characterProfile.updateSuccess })
       await loadCharacters()
+      triggerRefresh()
       setTimeout(() => setMessage(null), 3000)
     } catch (error) {
       console.error("[v0] Error updating character:", error)
@@ -316,7 +328,7 @@ export function CharactersUnified({ language }: CharactersUnifiedProps) {
     )
   }
 
-  if (viewMode === "profile") {
+  if (viewMode === "view") {
     if (!selectedCharacter) {
       return (
         <Card>
@@ -334,6 +346,155 @@ export function CharactersUnified({ language }: CharactersUnifiedProps) {
       )
     }
 
+    return (
+      <div className="w-full max-w-6xl space-y-6">
+        <div className="flex items-center justify-between">
+          <Button onClick={() => setViewMode("list")} variant="outline" className="gap-2">
+            <ArrowLeft className="w-4 h-4" />
+            {t.characterProfile.backToList}
+          </Button>
+          <Button onClick={() => setViewMode("edit")} className="gap-2">
+            <Edit className="w-4 h-4" />
+            {t.character.editCharacter}
+          </Button>
+        </div>
+
+        {/* Character Sheet Header */}
+        <Card className="bg-gradient-to-r from-primary/10 to-primary/5">
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="text-3xl">{selectedCharacter.name}</CardTitle>
+                <CardDescription className="text-lg mt-2">
+                  {selectedCharacter.class && `${selectedCharacter.class} • `}
+                  {t.characterProfile.level} {selectedCharacter.level || 1} • {selectedCharacter.race}
+                  {selectedCharacter.alignment && ` • ${selectedCharacter.alignment}`}
+                </CardDescription>
+              </div>
+            </div>
+          </CardHeader>
+        </Card>
+
+        {/* Core Attributes */}
+        <Card>
+          <CardHeader>
+            <CardTitle>{t.characterProfile.coreAttributes}</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+              {["strength", "dexterity", "constitution", "intelligence", "wisdom", "charisma"].map((attr) => {
+                const value = (selectedCharacter[attr as keyof Character] as number) || 10
+                const modifier = calculateModifier(value)
+                return (
+                  <Card key={attr} className="text-center">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-sm">{t.characterProfile.attributes[attr]}</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-4xl font-bold">{value}</div>
+                      <div className="text-lg text-muted-foreground mt-1">
+                        {modifier >= 0 ? "+" : ""}
+                        {modifier}
+                      </div>
+                    </CardContent>
+                  </Card>
+                )
+              })}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Combat Stats & Details */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {/* Combat Stats */}
+          <Card>
+            <CardHeader>
+              <CardTitle>{t.characterProfile.combatStats}</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <p className="text-sm text-muted-foreground">{t.characterProfile.maxHitPoints}</p>
+                  <p className="text-2xl font-bold">{selectedCharacter.max_hit_points || 10}</p>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-sm text-muted-foreground">{t.characterProfile.currentHitPoints}</p>
+                  <p className="text-2xl font-bold">{selectedCharacter.current_hit_points || 10}</p>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-sm text-muted-foreground">{t.characterProfile.armorClass}</p>
+                  <p className="text-2xl font-bold">{selectedCharacter.armor_class || 10}</p>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-sm text-muted-foreground">{t.characterProfile.speed}</p>
+                  <p className="text-2xl font-bold">{selectedCharacter.speed || 30} ft</p>
+                </div>
+                <div className="space-y-1 col-span-2">
+                  <p className="text-sm text-muted-foreground">{t.characterProfile.initiativeBonus}</p>
+                  <p className="text-2xl font-bold">
+                    {(selectedCharacter.initiative_bonus || 0) >= 0 ? "+" : ""}
+                    {selectedCharacter.initiative_bonus || 0}
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Character Details */}
+          <Card>
+            <CardHeader>
+              <CardTitle>{t.characterProfile.characterDetails}</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {selectedCharacter.background && (
+                <div className="space-y-1">
+                  <p className="text-sm font-medium text-muted-foreground">{t.characterProfile.background}</p>
+                  <p>{selectedCharacter.background}</p>
+                </div>
+              )}
+              <div className="space-y-1">
+                <p className="text-sm font-medium text-muted-foreground">{t.characterProfile.experiencePoints}</p>
+                <p className="text-xl font-bold">{selectedCharacter.experience_points || 0} XP</p>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Narrative Section */}
+        {(selectedCharacter.physical_description ||
+          selectedCharacter.personality_traits ||
+          selectedCharacter.backstory) && (
+          <Card>
+            <CardHeader>
+              <CardTitle>{t.characterProfile.narrativeTitle}</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {selectedCharacter.physical_description && (
+                <div className="space-y-2">
+                  <h4 className="font-semibold">{t.characterProfile.physicalDescription}</h4>
+                  <p className="text-muted-foreground whitespace-pre-wrap">{selectedCharacter.physical_description}</p>
+                </div>
+              )}
+              {selectedCharacter.personality_traits && (
+                <div className="space-y-2">
+                  <h4 className="font-semibold">{t.characterProfile.personalityTraits}</h4>
+                  <p className="text-muted-foreground whitespace-pre-wrap">{selectedCharacter.personality_traits}</p>
+                </div>
+              )}
+              {selectedCharacter.backstory && (
+                <div className="space-y-2">
+                  <h4 className="font-semibold">{t.characterProfile.backstory}</h4>
+                  <p className="text-muted-foreground whitespace-pre-wrap">{selectedCharacter.backstory}</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
+      </div>
+    )
+  }
+
+  if (viewMode === "edit") {
     return (
       <div className="w-full max-w-4xl space-y-6">
         <div className="flex items-center justify-between">
@@ -656,194 +817,142 @@ export function CharactersUnified({ language }: CharactersUnifiedProps) {
   }
 
   return (
-    <>
-      <Card className="w-full max-w-4xl shadow-xl">
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle className="text-2xl bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
-                {t.sidebar.characters}
-              </CardTitle>
-              <CardDescription>{t.character.manageAdventurers}</CardDescription>
-            </div>
-            <Button onClick={openCreateDialog} className="gap-2">
-              <UserPlus className="w-4 h-4" />
-              {t.character.createCharacter}
-            </Button>
+    <Card className="w-full shadow-xl">
+      <CardHeader>
+        <div className="flex items-center justify-between">
+          <div>
+            <CardTitle className="text-2xl bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
+              {t.sidebar.characters}
+            </CardTitle>
+            <CardDescription>{t.character.manageAdventurers}</CardDescription>
           </div>
-        </CardHeader>
-        <CardContent>
-          {message && !isDialogOpen && (
-            <Alert variant={message.type === "error" ? "destructive" : "default"} className="mb-4">
-              <AlertDescription>{message.text}</AlertDescription>
-            </Alert>
-          )}
+          <Button onClick={openCreateDialog} className="gap-2">
+            <UserPlus className="w-4 h-4" />
+            {t.character.createCharacter}
+          </Button>
+        </div>
+      </CardHeader>
+      <CardContent>
+        {message && !isDialogOpen && (
+          <Alert variant={message.type === "error" ? "destructive" : "default"} className="mb-4">
+            <AlertDescription>{message.text}</AlertDescription>
+          </Alert>
+        )}
 
-          <Tabs defaultValue="active" className="w-full">
-            <TabsList className="grid w-full grid-cols-2">
-              <TabsTrigger value="active">{t.character.activeCharacters}</TabsTrigger>
-              <TabsTrigger value="archived">{t.character.archivedCharacters}</TabsTrigger>
-            </TabsList>
+        <Tabs defaultValue="active" className="w-full">
+          <TabsList className="grid w-full grid-cols-2">
+            <TabsTrigger value="active">{t.character.activeCharacters}</TabsTrigger>
+            <TabsTrigger value="archived">{t.character.archivedCharacters}</TabsTrigger>
+          </TabsList>
 
-            <TabsContent value="active">
-              {characters.length === 0 ? (
-                <div className="text-center py-12">
-                  <div className="mx-auto mb-4 w-16 h-16 rounded-full bg-muted flex items-center justify-center">
-                    <User className="w-8 h-8 text-muted-foreground" />
-                  </div>
-                  <h3 className="text-lg font-semibold mb-2">{t.character.noCharactersYet}</h3>
-                  <p className="text-muted-foreground mb-6">{t.character.noActiveCharacters}</p>
-                  <Button onClick={openCreateDialog} className="gap-2">
-                    <UserPlus className="w-4 h-4" />
-                    {t.character.createCharacter}
-                  </Button>
+          <TabsContent value="active">
+            {characters.length === 0 ? (
+              <div className="text-center py-12">
+                <div className="mx-auto mb-4 w-16 h-16 rounded-full bg-muted flex items-center justify-center">
+                  <User className="w-8 h-8 text-muted-foreground" />
                 </div>
-              ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>{t.character.characterName}</TableHead>
-                      <TableHead>{t.character.race}</TableHead>
-                      <TableHead className="text-right">{t.character.actions}</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {characters.map((character) => (
-                      <TableRow key={character.id} className={character.id === activeCharacterId ? "bg-accent/50" : ""}>
-                        <TableCell className="font-medium">{character.name}</TableCell>
-                        <TableCell>{character.race}</TableCell>
-                        <TableCell className="text-right">
-                          <div className="flex justify-end gap-2">
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => handleViewProfile(character)}
-                              title={t.character.viewProfile}
-                            >
-                              <Eye className="w-4 h-4" />
-                            </Button>
-                            <Button variant="outline" size="sm" onClick={() => openEditDialog(character)}>
-                              <Edit className="w-4 h-4" />
-                            </Button>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => handleArchive(character)}
-                              disabled={character.id === activeCharacterId && characters.length === 1}
-                              title={t.character.archive}
-                            >
-                              <Archive className="w-4 h-4" />
-                            </Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              )}
-            </TabsContent>
-
-            <TabsContent value="archived">
-              {archivedCharacters.length === 0 ? (
-                <div className="text-center py-12">
-                  <div className="mx-auto mb-4 w-16 h-16 rounded-full bg-muted flex items-center justify-center">
-                    <Archive className="w-8 h-8 text-muted-foreground" />
-                  </div>
-                  <h3 className="text-lg font-semibold mb-2">{t.character.noArchivedCharacters}</h3>
-                  <p className="text-muted-foreground">{t.character.archivedAppearHere}</p>
-                </div>
-              ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>{t.character.characterName}</TableHead>
-                      <TableHead>{t.character.race}</TableHead>
-                      <TableHead className="text-right">{t.character.actions}</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {archivedCharacters.map((character) => (
-                      <TableRow key={character.id}>
-                        <TableCell className="font-medium text-muted-foreground">{character.name}</TableCell>
-                        <TableCell className="text-muted-foreground">{character.race}</TableCell>
-                        <TableCell className="text-right">
+                <h3 className="text-lg font-semibold mb-2">{t.character.noCharactersYet}</h3>
+                <p className="text-muted-foreground mb-6">{t.character.noActiveCharacters}</p>
+                <Button onClick={openCreateDialog} className="gap-2">
+                  <UserPlus className="w-4 h-4" />
+                  {t.character.createCharacter}
+                </Button>
+              </div>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>{t.character.characterName}</TableHead>
+                    <TableHead>{t.character.race}</TableHead>
+                    <TableHead className="text-right">{t.character.actions}</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {characters.map((character) => (
+                    <TableRow key={character.id} className={character.id === activeCharacterId ? "bg-accent/50" : ""}>
+                      <TableCell className="font-medium">{character.name}</TableCell>
+                      <TableCell>{character.race}</TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex gap-2 justify-end">
                           <Button
                             variant="outline"
                             size="sm"
-                            onClick={() => handleRestore(character)}
-                            title={t.character.restore}
+                            onClick={() => handleViewProfile(character)}
                             className="gap-2"
                           >
-                            <RotateCcw className="w-4 h-4" />
-                            {t.character.restore}
+                            <Eye className="w-4 h-4" />
+                            {t.character.viewSheet}
                           </Button>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              )}
-            </TabsContent>
-          </Tabs>
-        </CardContent>
-      </Card>
-
-      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{editingCharacter ? t.character.updateCharacter : t.character.createCharacter}</DialogTitle>
-            <DialogDescription>
-              {editingCharacter ? t.character.updateDescription : t.character.createDescription}
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label htmlFor="character-name">{t.character.characterName}</Label>
-              <Input
-                id="character-name"
-                placeholder={t.character.enterName}
-                value={characterName}
-                onChange={(e) => {
-                  setCharacterName(e.target.value)
-                  setMessage(null)
-                }}
-                disabled={saving}
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="race">{t.character.race}</Label>
-              <Input
-                id="race"
-                placeholder={t.character.enterRace}
-                value={race}
-                onChange={(e) => {
-                  setRace(e.target.value)
-                  setMessage(null)
-                }}
-                disabled={saving}
-              />
-            </div>
-
-            {message && (
-              <Alert variant={message.type === "error" ? "destructive" : "default"}>
-                <AlertDescription>{message.text}</AlertDescription>
-              </Alert>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleEditProfile(character)}
+                            className="gap-2"
+                          >
+                            <Edit className="w-4 h-4" />
+                            {t.character.edit}
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleArchive(character)}
+                            className="gap-2"
+                          >
+                            <Archive className="w-4 h-4" />
+                            {t.character.archive}
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
             )}
-          </div>
+          </TabsContent>
 
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsDialogOpen(false)} disabled={saving}>
-              {t.character.cancel}
-            </Button>
-            <Button onClick={handleSave} disabled={saving || !characterName.trim()} className="gap-2">
-              {saving && <Loader2 className="w-4 h-4 animate-spin" />}
-              {editingCharacter ? t.character.updateCharacter : t.character.createCharacter}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </>
+          <TabsContent value="archived">
+            {archivedCharacters.length === 0 ? (
+              <div className="text-center py-12">
+                <div className="mx-auto mb-4 w-16 h-16 rounded-full bg-muted flex items-center justify-center">
+                  <Archive className="w-8 h-8 text-muted-foreground" />
+                </div>
+                <h3 className="text-lg font-semibold mb-2">{t.character.noArchivedCharacters}</h3>
+                <p className="text-muted-foreground">{t.character.archivedAppearHere}</p>
+              </div>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>{t.character.characterName}</TableHead>
+                    <TableHead>{t.character.race}</TableHead>
+                    <TableHead className="text-right">{t.character.actions}</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {archivedCharacters.map((character) => (
+                    <TableRow key={character.id}>
+                      <TableCell className="font-medium text-muted-foreground">{character.name}</TableCell>
+                      <TableCell className="text-muted-foreground">{character.race}</TableCell>
+                      <TableCell className="text-right">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleRestore(character)}
+                          title={t.character.restore}
+                          className="gap-2"
+                        >
+                          <RotateCcw className="w-4 h-4" />
+                          {t.character.restore}
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </TabsContent>
+        </Tabs>
+      </CardContent>
+    </Card>
   )
 }

@@ -7,6 +7,8 @@ interface Character {
   id: string
   name: string
   race: string
+  level?: number
+  class?: string
 }
 
 interface ActiveCharacterContextType {

@@ -2,14 +2,16 @@ import type React from "react"
 import type { Metadata } from "next"
 import { Geist, Geist_Mono } from "next/font/google"
 import { Analytics } from "@vercel/analytics/next"
+import { ActiveCharacterProvider } from "@/lib/active-character-context"
+import { LanguageProvider } from "@/lib/language-context"
 import "./globals.css"
 
 const _geist = Geist({ subsets: ["latin"] })
 const _geistMono = Geist_Mono({ subsets: ["latin"] })
 
 export const metadata: Metadata = {
-  title: "Exchange D&D - Coin Converter",
-  description: "Convert currencies in Dungeons and Dragons with ease",
+  title: "Player's Companion - D&D Campaign Manager",
+  description: "Manage your D&D characters, finances, and campaigns",
   generator: "v0.app",
   icons: {
     icon: [
@@ -38,7 +40,9 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={`font-sans antialiased`}>
-        {children}
+        <LanguageProvider>
+          <ActiveCharacterProvider>{children}</ActiveCharacterProvider>
+        </LanguageProvider>
         <Analytics />
       </body>
     </html>

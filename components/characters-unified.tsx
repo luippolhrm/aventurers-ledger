@@ -10,8 +10,17 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { createBrowserClient } from "@/lib/supabase/client"
 import { useActiveCharacter } from "@/lib/active-character-context"
+import { useAuth } from "@/lib/auth-context"
 import { type Language, translations } from "@/lib/translations"
 import {
   UserPlus,
@@ -56,11 +65,13 @@ interface Character {
   backstory?: string
   created_at: string
   archived: boolean
+  user_id?: string
 }
 
 type ViewMode = "list" | "view" | "edit"
 
 export function CharactersUnified({ language }: CharactersUnifiedProps) {
+  const { user } = useAuth()
   const [viewMode, setViewMode] = useState<ViewMode>("list")
   const [characters, setCharacters] = useState<Character[]>([])
   const [archivedCharacters, setArchivedCharacters] = useState<Character[]>([])
@@ -159,6 +170,11 @@ export function CharactersUnified({ language }: CharactersUnifiedProps) {
       return
     }
 
+    if (!user) {
+      setMessage({ type: "error", text: "You must be logged in to create a character" })
+      return
+    }
+
     setSaving(true)
     try {
       const supabase = createBrowserClient()
@@ -185,6 +201,7 @@ export function CharactersUnified({ language }: CharactersUnifiedProps) {
             race: race.trim(),
             class: characterClass.trim() || null,
             level: level || null,
+            user_id: user.id,
             archived: false,
           })
           .select()
@@ -953,6 +970,98 @@ export function CharactersUnified({ language }: CharactersUnifiedProps) {
           </TabsContent>
         </Tabs>
       </CardContent>
+
+      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{editingCharacter ? t.character.editCharacter : t.character.createCharacter}</DialogTitle>
+            <DialogDescription>
+              {editingCharacter ? t.character.editCharacterDescription : t.character.createCharacterDescription}
+            </DialogDescription>
+          </DialogHeader>
+
+          {message && (
+            <Alert variant={message.type === "error" ? "destructive" : "default"}>
+              <AlertDescription>{message.text}</AlertDescription>
+            </Alert>
+          )}
+
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="character-name">{t.character.characterName}</Label>
+              <Input
+                id="character-name"
+                value={characterName}
+                onChange={(e) => setCharacterName(e.target.value)}
+                placeholder={t.character.characterNamePlaceholder}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="race">{t.character.race}</Label>
+              <Input
+                id="race"
+                value={race}
+                onChange={(e) => setRace(e.target.value)}
+                placeholder={t.character.racePlaceholder}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="class">{t.character.class}</Label>
+              <Select value={characterClass} onValueChange={setCharacterClass}>
+                <SelectTrigger id="class">
+                  <SelectValue placeholder={t.character.selectClass} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="barbarian">{t.character.classes.barbarian}</SelectItem>
+                  <SelectItem value="bard">{t.character.classes.bard}</SelectItem>
+                  <SelectItem value="cleric">{t.character.classes.cleric}</SelectItem>
+                  <SelectItem value="druid">{t.character.classes.druid}</SelectItem>
+                  <SelectItem value="fighter">{t.character.classes.fighter}</SelectItem>
+                  <SelectItem value="monk">{t.character.classes.monk}</SelectItem>
+                  <SelectItem value="paladin">{t.character.classes.paladin}</SelectItem>
+                  <SelectItem value="ranger">{t.character.classes.ranger}</SelectItem>
+                  <SelectItem value="rogue">{t.character.classes.rogue}</SelectItem>
+                  <SelectItem value="sorcerer">{t.character.classes.sorcerer}</SelectItem>
+                  <SelectItem value="warlock">{t.character.classes.warlock}</SelectItem>
+                  <SelectItem value="wizard">{t.character.classes.wizard}</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="level">{t.character.level}</Label>
+              <Input
+                id="level"
+                type="number"
+                min="1"
+                max="20"
+                value={level}
+                onChange={(e) => setLevel(Number.parseInt(e.target.value) || 1)}
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsDialogOpen(false)} disabled={saving}>
+              {t.character.cancel}
+            </Button>
+            <Button onClick={handleSave} disabled={saving}>
+              {saving ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  {t.character.saving}
+                </>
+              ) : editingCharacter ? (
+                t.character.updateCharacter
+              ) : (
+                t.character.createCharacter
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Card>
   )
 }

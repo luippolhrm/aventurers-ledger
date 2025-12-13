@@ -5,7 +5,6 @@ import { CurrencyExchangeCard } from "@/components/currency-exchange-card"
 import { CharactersUnified } from "@/components/characters-unified"
 import { WelcomeDashboard } from "@/components/welcome-dashboard"
 import { CharacterSelector } from "@/components/character-selector"
-import { LanguageSelector } from "@/components/language-selector"
 import { UserMenu } from "@/components/user-menu"
 import { Sidebar } from "@/components/sidebar"
 import { Finances } from "@/components/finances"
@@ -14,7 +13,7 @@ import { useLanguage } from "@/lib/language-context"
 
 export function MainLayout() {
   const [activeModule, setActiveModule] = useState("welcome")
-  const { language, setLanguage, t } = useLanguage()
+  const { language, t } = useLanguage()
 
   return (
     <div className="min-h-screen flex">
@@ -24,7 +23,6 @@ export function MainLayout() {
         <header className="py-6 px-4 md:px-8 text-center border-b border-border relative">
           <div className="absolute top-4 right-4 flex items-center gap-3">
             <CharacterSelector language={language} onNavigateToCharacters={() => setActiveModule("characters")} />
-            <LanguageSelector language={language} onLanguageChange={setLanguage} />
             <UserMenu />
           </div>
 

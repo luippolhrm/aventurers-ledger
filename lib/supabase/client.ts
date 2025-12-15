@@ -32,6 +32,12 @@ export function createBrowserClient() {
         autoRefreshToken: true,
         detectSessionInUrl: true,
       },
+      global: {
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+        },
+      },
     })
     console.log("[v0] Supabase client initialized successfully")
   } catch (error) {

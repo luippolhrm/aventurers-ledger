@@ -31,5 +31,11 @@ export async function createClient() {
         }
       },
     },
+    global: {
+      headers: {
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+      },
+    },
   })
 }

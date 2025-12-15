@@ -179,6 +179,8 @@ export function Finances({ language }: FinancesProps) {
   }
 
   const loadAllCharacters = async () => {
+    // Note: This intentionally loads ALL characters (not filtered by user_id) 
+    // because users need to be able to transfer money to characters from other users
     const { data } = await supabase.from("characters").select("id, name").eq("archived", false).order("name")
 
     setAllCharacters(data || [])

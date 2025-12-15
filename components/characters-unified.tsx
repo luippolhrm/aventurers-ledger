@@ -103,10 +103,18 @@ export function CharactersUnified({ language }: CharactersUnifiedProps) {
     try {
       const supabase = createBrowserClient()
 
+      if (!user) {
+        setCharacters([])
+        setArchivedCharacters([])
+        setLoading(false)
+        return
+      }
+
       const { data: activeData, error: activeError } = await supabase
         .from("characters")
         .select("*")
         .eq("archived", false)
+        .eq("user_id", user.id)
         .order("created_at", { ascending: true })
 
       if (activeError) throw activeError
@@ -115,6 +123,7 @@ export function CharactersUnified({ language }: CharactersUnifiedProps) {
         .from("characters")
         .select("*")
         .eq("archived", true)
+        .eq("user_id", user.id)
         .order("created_at", { ascending: true })
 
       if (archivedError) throw archivedError

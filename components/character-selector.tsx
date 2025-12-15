@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button"
 import { User, ChevronDown } from "lucide-react"
 import { createBrowserClient } from "@/lib/supabase/client"
 import { useActiveCharacter } from "@/lib/active-character-context"
+import { useAuth } from "@/lib/auth-context"
 import { type Language, translations } from "@/lib/translations"
 
 interface Character {
@@ -31,11 +32,12 @@ export function CharacterSelector({ language, onNavigateToCharacters }: Characte
   const [characters, setCharacters] = useState<Character[]>([])
   const [activeCharacter, setActiveCharacter] = useState<Character | null>(null)
   const { activeCharacterId, setActiveCharacterId, refreshTrigger } = useActiveCharacter()
+  const { user } = useAuth()
   const t = translations[language]
 
   useEffect(() => {
     loadCharacters()
-  }, [refreshTrigger]) // Reload when refreshTrigger changes
+  }, [refreshTrigger, user]) // Reload when refreshTrigger or user changes
 
   useEffect(() => {
     if (activeCharacterId && characters.length > 0) {
@@ -48,7 +50,17 @@ export function CharacterSelector({ language, onNavigateToCharacters }: Characte
     try {
       const supabase = createBrowserClient()
 
-      const queryPromise = supabase.from("characters").select("*").eq("archived", false).order("created_at")
+      if (!user) {
+        setCharacters([])
+        return
+      }
+
+      const queryPromise = supabase
+        .from("characters")
+        .select("*")
+        .eq("archived", false)
+        .eq("user_id", user.id)
+        .order("created_at")
       const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("Query timeout")), 10000))
 
       const { data, error } = (await Promise.race([queryPromise, timeoutPromise])) as any

@@ -20,7 +20,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined)
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [profile, setProfile] = useState<UserProfile | null>(null)
-  const [loading, setLoading] = useState(false)
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     let isMounted = true
@@ -28,6 +28,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const loadSession = async () => {
       try {
+        setLoading(true)
         const {
           data: { session },
           error,
@@ -35,6 +36,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         if (error) {
           console.error("[v0] Auth error:", error.message)
+          if (isMounted) {
+            setLoading(false)
+          }
           return
         }
 
@@ -48,8 +52,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             setProfile(profileData)
           }
         }
+
+        if (isMounted) {
+          setLoading(false)
+        }
       } catch (error) {
         console.error("[v0] Session load error:", error)
+        if (isMounted) {
+          setLoading(false)
+        }
       }
     }
 

@@ -23,21 +23,19 @@ export function AppLayout({ children }: AppLayoutProps) {
   }
 
   const handleModuleChange = (module: string) => {
-    const routes: Record<string, string> = {
-      welcome: "/dashboard",
-      campaigns: "/dashboard",
-      characters: "/dashboard",
-      finances: "/dashboard",
-      inventory: "/dashboard",
-      "currency-converter": "/dashboard",
-      profile: "/profile",
-      settings: "/settings",
+    // Profile and Settings have their own routes
+    if (module === "profile") {
+      router.push("/profile")
+      return
+    }
+    if (module === "settings") {
+      router.push("/settings")
+      return
     }
 
-    const route = routes[module]
-    if (route) {
-      router.push(route)
-    }
+    // All dashboard modules (welcome, campaigns, characters, etc.) go to /dashboard
+    // The MainLayout component handles the internal module switching
+    router.push("/dashboard")
   }
 
   return (

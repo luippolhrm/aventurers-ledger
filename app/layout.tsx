@@ -5,10 +5,11 @@ import { Analytics } from "@vercel/analytics/next"
 import { ActiveCharacterProvider } from "@/lib/active-character-context"
 import { LanguageProvider } from "@/lib/language-context"
 import { AuthProvider } from "@/lib/auth-context"
+import { ThemeProvider } from "@/components/theme-provider"
 import "./globals.css"
 
-const _geist = Geist({ subsets: ["latin"] })
-const _geistMono = Geist_Mono({ subsets: ["latin"] })
+const geist = Geist({ subsets: ["latin"], variable: "--font-sans" })
+const geistMono = Geist_Mono({ subsets: ["latin"], variable: "--font-mono" })
 
 export const metadata: Metadata = {
   title: "Player's Companion - D&D Campaign Manager",
@@ -39,13 +40,15 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="en">
-      <body className={`font-sans antialiased`}>
-        <LanguageProvider>
-          <AuthProvider>
-            <ActiveCharacterProvider>{children}</ActiveCharacterProvider>
-          </AuthProvider>
-        </LanguageProvider>
+    <html lang="en" suppressHydrationWarning>
+      <body className={`${geist.variable} ${geistMono.variable} font-sans antialiased`}>
+        <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
+          <LanguageProvider>
+            <AuthProvider>
+              <ActiveCharacterProvider>{children}</ActiveCharacterProvider>
+            </AuthProvider>
+          </LanguageProvider>
+        </ThemeProvider>
         <Analytics />
       </body>
     </html>

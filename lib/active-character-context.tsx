@@ -78,6 +78,15 @@ export function ActiveCharacterProvider({ children }: { children: ReactNode }) {
         return
       }
 
+      // Validate that the character belongs to the current user
+      if (user && data.user_id !== user.id) {
+        console.error("[v0] Security: Attempted to load character that doesn't belong to current user")
+        setActiveCharacter(null)
+        localStorage.removeItem("activeCharacterId")
+        setActiveCharacterId(null)
+        return
+      }
+
       setActiveCharacter(data)
     } catch (error: any) {
       console.error("[v0] Error in loadCharacter:", error?.message || error)

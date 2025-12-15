@@ -68,8 +68,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     return () => {
       isMounted = false
-      // Reset loading state on cleanup to prevent it from staying true indefinitely
-      setLoading(false)
     }
   }, [])
 

@@ -9,6 +9,7 @@ import { UserMenu } from "@/components/user-menu"
 import { Sidebar } from "@/components/sidebar"
 import { Finances } from "@/components/finances"
 import { Inventory } from "@/components/inventory"
+import { Campaigns } from "@/components/campaigns"
 import { useLanguage } from "@/lib/language-context"
 
 export function MainLayout() {
@@ -32,6 +33,7 @@ export function MainLayout() {
 
         <main className="flex-1 flex items-center justify-center p-4 md:p-8">
           {activeModule === "welcome" && <WelcomeDashboard language={language} onNavigate={setActiveModule} />}
+          {activeModule === "campaigns" && <Campaigns language={language} />}
           {activeModule === "characters" && <CharactersUnified language={language} />}
           {activeModule === "currency-converter" && <CurrencyExchangeCard language={language} />}
           {activeModule === "finances" && <Finances language={language} />}

@@ -47,17 +47,26 @@ export function CharacterSelector({ language, onNavigateToCharacters }: Characte
   const loadCharacters = async () => {
     try {
       const supabase = createBrowserClient()
-      const { data, error } = await supabase.from("characters").select("*").eq("archived", false).order("created_at")
 
-      if (error) throw error
+      const queryPromise = supabase.from("characters").select("*").eq("archived", false).order("created_at")
+      const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("Query timeout")), 10000))
+
+      const { data, error } = (await Promise.race([queryPromise, timeoutPromise])) as any
+
+      if (error) {
+        console.error("[v0] CharacterSelector: Error loading characters:", error.message)
+        setCharacters([])
+        return
+      }
 
       setCharacters(data || [])
 
       if (!activeCharacterId && data && data.length > 0) {
         setActiveCharacterId(data[0].id)
       }
-    } catch (error) {
-      console.error("[v0] CharacterSelector: Error loading characters:", error)
+    } catch (error: any) {
+      console.error("[v0] CharacterSelector: Error loading characters:", error?.message || error)
+      setCharacters([])
     }
   }
 

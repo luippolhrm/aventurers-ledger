@@ -57,7 +57,11 @@ export function ActiveCharacterProvider({ children }: { children: ReactNode }) {
   const loadCharacter = async (id: string) => {
     try {
       const supabase = createBrowserClient()
-      const { data, error } = await supabase.from("characters").select("*").eq("id", id).maybeSingle()
+
+      const queryPromise = supabase.from("characters").select("*").eq("id", id).maybeSingle()
+      const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("Query timeout")), 10000))
+
+      const { data, error } = (await Promise.race([queryPromise, timeoutPromise])) as any
 
       if (error) {
         console.error("[v0] Error loading active character:", error.message)
@@ -75,8 +79,8 @@ export function ActiveCharacterProvider({ children }: { children: ReactNode }) {
       }
 
       setActiveCharacter(data)
-    } catch (error) {
-      console.error("[v0] Error in loadCharacter:", error)
+    } catch (error: any) {
+      console.error("[v0] Error in loadCharacter:", error?.message || error)
       setActiveCharacter(null)
       localStorage.removeItem("activeCharacterId")
       setActiveCharacterId(null)

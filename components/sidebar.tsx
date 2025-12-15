@@ -1,7 +1,7 @@
 "use client"
 
 import { cn } from "@/lib/utils"
-import { Coins, Menu, X, Users, Home, DollarSign, Package } from "lucide-react"
+import { Coins, Menu, X, Users, Home, DollarSign, Package, Map } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useState } from "react"
 import { type Language, translations } from "@/lib/translations"
@@ -21,6 +21,11 @@ export function Sidebar({ activeModule, onModuleChange, language }: SidebarProps
       id: "welcome",
       name: t.sidebar.welcome,
       icon: Home,
+    },
+    {
+      id: "campaigns",
+      name: t.sidebar.campaigns,
+      icon: Map,
     },
     {
       id: "characters",

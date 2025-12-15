@@ -22,6 +22,39 @@ Continue building your app on:
 
 **[https://v0.app/chat/noRk8GDksbm](https://v0.app/chat/noRk8GDksbm)**
 
+## Environment Variables
+
+This project requires Supabase configuration. Create a `.env.local` file in the root directory with the following variables:
+
+```env
+# Supabase Configuration
+NEXT_PUBLIC_SUPABASE_URL=your-project-url.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key-here
+```
+
+Get these values from your [Supabase project settings](https://app.supabase.com).
+
+**For Vercel/Production Deployment:**
+Add these environment variables in your Vercel project settings under "Environment Variables".
+
+## Local Development
+
+1. Clone this repository
+2. Install dependencies:
+   ```bash
+   npm install
+   # or
+   pnpm install
+   ```
+3. Create `.env.local` with your Supabase credentials (see above)
+4. Run the development server:
+   ```bash
+   npm run dev
+   # or
+   pnpm dev
+   ```
+5. Open [http://localhost:3000](http://localhost:3000)
+
 ## How It Works
 
 1. Create and modify your project using [v0.app](https://v0.app)

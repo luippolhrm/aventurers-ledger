@@ -25,6 +25,7 @@ export function AppLayout({ children }: AppLayoutProps) {
   const handleModuleChange = (module: string) => {
     const routes: Record<string, string> = {
       welcome: "/dashboard",
+      campaigns: "/dashboard",
       characters: "/dashboard",
       finances: "/dashboard",
       inventory: "/dashboard",
@@ -41,7 +42,12 @@ export function AppLayout({ children }: AppLayoutProps) {
 
   return (
     <div className="min-h-screen flex">
-      <Sidebar activeModule={getActiveModule()} onModuleChange={handleModuleChange} language={language} />
+      <Sidebar
+        activeModule={getActiveModule()}
+        onModuleChange={handleModuleChange}
+        language={language}
+        includeProfileSettings={true}
+      />
 
       <div className="flex-1 flex flex-col">
         <header className="py-6 px-4 md:px-8 text-center border-b border-border relative">

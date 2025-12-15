@@ -9,7 +9,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
-import { AlertCircle, Copy, Users, Crown, Trash2, UserPlus, LogOut } from "lucide-react"
+import { AlertCircle, Copy, Crown, Trash2, UserPlus, LogOut } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { createBrowserClient } from "@/lib/supabase/client"
 import { useAuth } from "@/lib/auth-context"
@@ -128,6 +128,17 @@ export function Campaigns({ language }: CampaignsProps) {
 
       if (createError) throw createError
 
+      const { error: memberError } = await supabase.from("campaign_members").upsert(
+        {
+          campaign_id: data.id,
+          user_id: user.id,
+          role: "game_master",
+        },
+        { onConflict: "campaign_id,user_id" },
+      )
+
+      if (memberError) throw memberError
+
       setSuccess(t.campaigns.campaignCreated || "Campaign created successfully!")
       setCampaignName("")
       setCampaignDescription("")
@@ -135,7 +146,7 @@ export function Campaigns({ language }: CampaignsProps) {
       loadCampaigns()
     } catch (err: any) {
       console.error("[v0] Error creating campaign:", err)
-      setError(err.message)
+      setError(err.message || "Failed to create campaign")
     }
   }
 
@@ -158,7 +169,19 @@ export function Campaigns({ language }: CampaignsProps) {
         return
       }
 
-      // Add user as member
+      const { data: existingMember } = await supabase
+        .from("campaign_members")
+        .select("id, role")
+        .eq("campaign_id", campaign.id)
+        .eq("user_id", user.id)
+        .eq("role", "player")
+        .single()
+
+      if (existingMember) {
+        setError(t.campaigns.alreadyMember || "You are already a member of this campaign")
+        return
+      }
+
       const { error: joinError } = await supabase.from("campaign_members").insert({
         campaign_id: campaign.id,
         user_id: user.id,
@@ -167,7 +190,19 @@ export function Campaigns({ language }: CampaignsProps) {
 
       if (joinError) {
         if (joinError.code === "23505") {
-          setError(t.campaigns.alreadyMember || "You are already a member of this campaign")
+          // Only show error if they're already a player, GMs can be players too
+          const { data: checkMember } = await supabase
+            .from("campaign_members")
+            .select("role")
+            .eq("campaign_id", campaign.id)
+            .eq("user_id", user.id)
+            .single()
+
+          if (checkMember?.role === "player") {
+            setError(t.campaigns.alreadyMember || "You are already a member of this campaign")
+          } else {
+            setSuccess(t.campaigns.joinedCampaign || "Joined campaign successfully as a player!")
+          }
         } else {
           throw joinError
         }
@@ -196,19 +231,21 @@ export function Campaigns({ language }: CampaignsProps) {
 
       if (error) throw error
 
-      // Get user emails
-      const { data: profiles } = await supabase
-        .from("profiles")
-        .select("id, display_name")
-        .in(
-          "id",
-          data.map((m) => m.user_id),
-        )
+      let membersWithEmails = data
+      if (data && data.length > 0) {
+        const { data: profiles } = await supabase
+          .from("profiles")
+          .select("id, display_name")
+          .in(
+            "id",
+            data.map((m) => m.user_id),
+          )
 
-      const membersWithEmails = data.map((member) => ({
-        ...member,
-        user_email: profiles?.find((p) => p.id === member.user_id)?.display_name || member.user_id,
-      }))
+        membersWithEmails = data.map((member) => ({
+          ...member,
+          user_email: profiles?.find((p) => p.id === member.user_id)?.display_name || member.user_id,
+        }))
+      }
 
       setMembers(membersWithEmails)
       setIsViewDialogOpen(true)
@@ -311,133 +348,211 @@ export function Campaigns({ language }: CampaignsProps) {
         </TabsList>
 
         <TabsContent value="all" className="mt-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {campaigns.map((campaign) => (
-              <Card
-                key={campaign.id}
-                className="hover:shadow-lg transition-shadow cursor-pointer"
-                onClick={() => handleViewCampaign(campaign)}
-              >
-                <CardHeader>
-                  <div className="flex items-start justify-between">
-                    <CardTitle className="text-lg">{campaign.name}</CardTitle>
-                    {isGM(campaign) ? (
-                      <Badge variant="default" className="ml-2">
-                        <Crown className="w-3 h-3 mr-1" />
-                        GM
-                      </Badge>
-                    ) : (
-                      <Badge variant="secondary" className="ml-2">
-                        <Users className="w-3 h-3 mr-1" />
-                        {t.campaigns.player || "Player"}
-                      </Badge>
-                    )}
-                  </div>
-                  <CardDescription className="line-clamp-2">
-                    {campaign.description || t.campaigns.noDescription || "No description"}
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="flex items-center justify-between text-sm text-muted-foreground">
-                    <span>{new Date(campaign.created_at).toLocaleDateString()}</span>
-                    <Badge variant="outline">{campaign.status}</Badge>
-                  </div>
+          {/* Campaign List */}
+          <div className="space-y-4">
+            {loading ? (
+              <Card>
+                <CardContent className="pt-6">{t.campaigns.loading || "Loading campaigns..."}</CardContent>
+              </Card>
+            ) : campaigns.length === 0 ? (
+              <Card>
+                <CardContent className="pt-6">
+                  {t.campaigns.noCampaigns || "You are not part of any campaigns yet."}
                 </CardContent>
               </Card>
-            ))}
-          </div>
-          {campaigns.length === 0 && (
-            <div className="text-center py-12 text-muted-foreground">
-              {t.campaigns.noCampaigns || "No campaigns yet. Create one to get started!"}
-            </div>
-          )}
-        </TabsContent>
-
-        <TabsContent value="gm" className="mt-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {campaigns
-              .filter((c) => isGM(c))
-              .map((campaign) => (
+            ) : (
+              campaigns.map((campaign) => (
                 <Card
                   key={campaign.id}
-                  className="hover:shadow-lg transition-shadow cursor-pointer"
+                  className="cursor-pointer hover:bg-accent"
                   onClick={() => handleViewCampaign(campaign)}
                 >
                   <CardHeader>
-                    <CardTitle className="text-lg">{campaign.name}</CardTitle>
-                    <CardDescription className="line-clamp-2">
-                      {campaign.description || t.campaigns.noDescription || "No description"}
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="flex items-center justify-between text-sm text-muted-foreground">
-                      <span>{new Date(campaign.created_at).toLocaleDateString()}</span>
-                      <Badge variant="outline">{campaign.status}</Badge>
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <CardTitle>{campaign.name}</CardTitle>
+                          <Badge variant={campaign.role === "game_master" ? "default" : "secondary"}>
+                            {campaign.role === "game_master" ? (
+                              <span className="flex items-center gap-1">
+                                <Crown className="h-3 w-3" /> GM
+                              </span>
+                            ) : (
+                              <span>{t.campaigns.player || "Player"}</span>
+                            )}
+                          </Badge>
+                        </div>
+                        <CardDescription>{campaign.description}</CardDescription>
+                      </div>
+                      {campaign.role === "game_master" && (
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleDeleteCampaign(campaign.id)
+                          }}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      )}
                     </div>
-                  </CardContent>
+                  </CardHeader>
                 </Card>
-              ))}
+              ))
+            )}
+          </div>
+        </TabsContent>
+
+        <TabsContent value="gm" className="mt-6">
+          {/* Campaign List */}
+          <div className="space-y-4">
+            {loading ? (
+              <Card>
+                <CardContent className="pt-6">{t.campaigns.loading || "Loading campaigns..."}</CardContent>
+              </Card>
+            ) : campaigns.length === 0 ? (
+              <Card>
+                <CardContent className="pt-6">
+                  {t.campaigns.noCampaigns || "You are not part of any campaigns yet."}
+                </CardContent>
+              </Card>
+            ) : (
+              campaigns
+                .filter((c) => isGM(c))
+                .map((campaign) => (
+                  <Card
+                    key={campaign.id}
+                    className="cursor-pointer hover:bg-accent"
+                    onClick={() => handleViewCampaign(campaign)}
+                  >
+                    <CardHeader>
+                      <div className="flex items-start justify-between">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <CardTitle>{campaign.name}</CardTitle>
+                            <Badge variant={campaign.role === "game_master" ? "default" : "secondary"}>
+                              {campaign.role === "game_master" ? (
+                                <span className="flex items-center gap-1">
+                                  <Crown className="h-3 w-3" /> GM
+                                </span>
+                              ) : (
+                                <span>{t.campaigns.player || "Player"}</span>
+                              )}
+                            </Badge>
+                          </div>
+                          <CardDescription>{campaign.description}</CardDescription>
+                        </div>
+                        {campaign.role === "game_master" && (
+                          <Button
+                            variant="destructive"
+                            size="sm"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handleDeleteCampaign(campaign.id)
+                            }}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        )}
+                      </div>
+                    </CardHeader>
+                  </Card>
+                ))
+            )}
           </div>
         </TabsContent>
 
         <TabsContent value="player" className="mt-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {campaigns
-              .filter((c) => !isGM(c))
-              .map((campaign) => (
-                <Card
-                  key={campaign.id}
-                  className="hover:shadow-lg transition-shadow cursor-pointer"
-                  onClick={() => handleViewCampaign(campaign)}
-                >
-                  <CardHeader>
-                    <CardTitle className="text-lg">{campaign.name}</CardTitle>
-                    <CardDescription className="line-clamp-2">
-                      {campaign.description || t.campaigns.noDescription || "No description"}
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="flex items-center justify-between text-sm text-muted-foreground">
-                      <span>{new Date(campaign.created_at).toLocaleDateString()}</span>
-                      <Badge variant="outline">{campaign.status}</Badge>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
+          {/* Campaign List */}
+          <div className="space-y-4">
+            {loading ? (
+              <Card>
+                <CardContent className="pt-6">{t.campaigns.loading || "Loading campaigns..."}</CardContent>
+              </Card>
+            ) : campaigns.length === 0 ? (
+              <Card>
+                <CardContent className="pt-6">
+                  {t.campaigns.noCampaigns || "You are not part of any campaigns yet."}
+                </CardContent>
+              </Card>
+            ) : (
+              campaigns
+                .filter((c) => !isGM(c))
+                .map((campaign) => (
+                  <Card
+                    key={campaign.id}
+                    className="cursor-pointer hover:bg-accent"
+                    onClick={() => handleViewCampaign(campaign)}
+                  >
+                    <CardHeader>
+                      <div className="flex items-start justify-between">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <CardTitle>{campaign.name}</CardTitle>
+                            <Badge variant={campaign.role === "game_master" ? "default" : "secondary"}>
+                              {campaign.role === "game_master" ? (
+                                <span className="flex items-center gap-1">
+                                  <Crown className="h-3 w-3" /> GM
+                                </span>
+                              ) : (
+                                <span>{t.campaigns.player || "Player"}</span>
+                              )}
+                            </Badge>
+                          </div>
+                          <CardDescription>{campaign.description}</CardDescription>
+                        </div>
+                      </div>
+                    </CardHeader>
+                  </Card>
+                ))
+            )}
           </div>
         </TabsContent>
       </Tabs>
 
       {/* Create Campaign Dialog */}
       <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{t.campaigns.createCampaign || "Create New Campaign"}</DialogTitle>
-            <DialogDescription>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader className="space-y-2">
+            <DialogTitle className="text-2xl font-bold">
+              {t.campaigns.createCampaign || "Create New Campaign"}
+            </DialogTitle>
+            <DialogDescription className="text-base pt-2">
               {t.campaigns.createDescription || "Create a new campaign and invite players"}
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4">
-            <div>
-              <Label htmlFor="name">{t.campaigns.campaignName || "Campaign Name"}</Label>
+          <div className="space-y-5 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="name" className="text-sm font-semibold">
+                {t.campaigns.campaignName || "Campaign Name"}
+              </Label>
               <Input
                 id="name"
                 value={campaignName}
                 onChange={(e) => setCampaignName(e.target.value)}
                 placeholder={t.campaigns.namePlaceholder || "Enter campaign name"}
+                className="h-10 border-2 focus:border-primary transition-colors"
               />
             </div>
-            <div>
-              <Label htmlFor="description">{t.campaigns.description || "Description"}</Label>
+            <div className="space-y-2">
+              <Label htmlFor="description" className="text-sm font-semibold">
+                {t.campaigns.description || "Description"}
+              </Label>
               <Textarea
                 id="description"
                 value={campaignDescription}
                 onChange={(e) => setCampaignDescription(e.target.value)}
                 placeholder={t.campaigns.descriptionPlaceholder || "Describe your campaign"}
                 rows={4}
+                className="border-2 focus:border-primary transition-colors resize-none"
               />
             </div>
-            <Button onClick={handleCreateCampaign} className="w-full" disabled={!campaignName.trim()}>
+            <Button
+              onClick={handleCreateCampaign}
+              className="w-full h-11 text-base font-semibold mt-2"
+              disabled={!campaignName.trim()}
+            >
               {t.campaigns.create || "Create"}
             </Button>
           </div>
@@ -490,74 +605,79 @@ export function Campaigns({ language }: CampaignsProps) {
               </DialogDescription>
             </DialogHeader>
 
-            <div className="space-y-4">
-              {isGM(selectedCampaign) && (
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-sm">{t.campaigns.inviteCode || "Invite Code"}</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="flex items-center gap-2">
-                      <code className="flex-1 p-2 bg-muted rounded font-mono text-lg">
-                        {selectedCampaign.invite_code}
-                      </code>
+            <Tabs defaultValue="overview" className="w-full">
+              <TabsList className="grid w-full grid-cols-2">
+                <TabsTrigger value="overview">{t.campaigns.overview || "Overview"}</TabsTrigger>
+                {selectedCampaign.role === "game_master" && (
+                  <TabsTrigger value="members">{t.campaigns.members || "Members"}</TabsTrigger>
+                )}
+              </TabsList>
+
+              <TabsContent value="overview" className="space-y-4">
+                <div>
+                  <h4 className="font-semibold mb-2">{t.campaigns.description || "Description"}</h4>
+                  <p>{selectedCampaign.description || t.campaigns.noDescription || "No description provided"}</p>
+                </div>
+
+                {selectedCampaign.role === "game_master" && (
+                  <div>
+                    <h4 className="font-semibold mb-2">{t.campaigns.inviteCode || "Invite Code"}</h4>
+                    <div className="flex gap-2">
+                      <Input value={selectedCampaign.invite_code || "N/A"} readOnly />
                       <Button
-                        size="sm"
                         variant="outline"
+                        size="sm"
                         onClick={() => handleCopyInviteCode(selectedCampaign.invite_code)}
                       >
-                        <Copy className="w-4 h-4" />
+                        <Copy className="h-4 w-4" />
                       </Button>
                     </div>
-                  </CardContent>
-                </Card>
-              )}
-
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-sm">
-                    {t.campaigns.members || "Members"} ({members.length})
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-2">
-                    {members.map((member) => (
-                      <div key={member.id} className="flex items-center justify-between p-2 rounded hover:bg-muted">
-                        <div className="flex items-center gap-2">
-                          {member.role === "game_master" ? (
-                            <Crown className="w-4 h-4 text-yellow-600" />
-                          ) : (
-                            <Users className="w-4 h-4" />
-                          )}
-                          <span className="text-sm">{member.user_email}</span>
-                        </div>
-                        <Badge variant={member.role === "game_master" ? "default" : "secondary"}>
-                          {member.role === "game_master" ? "GM" : t.campaigns.player || "Player"}
-                        </Badge>
-                      </div>
-                    ))}
                   </div>
-                </CardContent>
-              </Card>
-
-              <div className="flex gap-2">
-                {isGM(selectedCampaign) ? (
-                  <Button
-                    variant="destructive"
-                    onClick={() => handleDeleteCampaign(selectedCampaign.id)}
-                    className="w-full"
-                  >
-                    <Trash2 className="w-4 h-4 mr-2" />
-                    {t.campaigns.deleteCampaign || "Delete Campaign"}
-                  </Button>
-                ) : (
-                  <Button variant="outline" onClick={() => handleLeaveCampaign(selectedCampaign.id)} className="w-full">
-                    <LogOut className="w-4 h-4 mr-2" />
-                    {t.campaigns.leaveCampaign || "Leave Campaign"}
-                  </Button>
                 )}
-              </div>
-            </div>
+
+                <Button onClick={() => handleLeaveCampaign(selectedCampaign.id)} variant="outline" className="w-full">
+                  <LogOut className="h-4 w-4 mr-2" /> {t.campaigns.leave || "Leave Campaign"}
+                </Button>
+              </TabsContent>
+
+              {selectedCampaign.role === "game_master" && (
+                <TabsContent value="members" className="space-y-4">
+                  {members.length === 0 ? (
+                    <p>{t.campaigns.noMembers || "No members in this campaign"}</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {members.map((member) => (
+                        <div key={member.id} className="flex items-center justify-between p-2 bg-muted rounded">
+                          <div className="flex items-center gap-2">
+                            <span>{member.user_email}</span>
+                            <Badge variant={member.role === "game_master" ? "default" : "secondary"}>
+                              {member.role === "game_master" ? (
+                                <span className="flex items-center gap-1">
+                                  <Crown className="h-3 w-3" /> GM
+                                </span>
+                              ) : (
+                                member.role
+                              )}
+                            </Badge>
+                          </div>
+                          {member.role !== "game_master" && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => {
+                                // Future: implement kick member functionality
+                              }}
+                            >
+                              <UserPlus className="h-4 w-4" />
+                            </Button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </TabsContent>
+              )}
+            </Tabs>
           </DialogContent>
         </Dialog>
       )}

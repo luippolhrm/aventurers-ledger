@@ -51,29 +51,34 @@ export function WalletManager({ language }: WalletManagerProps) {
 
     setIsLoading(true)
     try {
-      const { data, error } = await supabase.from("wallets").select("*").eq("character_id", activeCharacter.id).single()
+      const { data, error } = await supabase
+        .from("wallets")
+        .select("*")
+        .eq("character_id", activeCharacter.id)
+        .maybeSingle()
 
       if (error) {
-        if (error.code === "PGRST116") {
-          const { data: newWallet, error: insertError } = await supabase
-            .from("wallets")
-            .insert({
-              character_id: activeCharacter.id,
-              platinum: 0,
-              gold: 0,
-              electrum: 0,
-              silver: 0,
-              copper: 0,
-            })
-            .select()
-            .single()
+        throw error
+      }
 
-          if (insertError) throw insertError
-          setWallet({ PP: 0, GP: 0, EP: 0, SP: 0, CP: 0 })
-          setTotalWealth(0)
-        } else {
-          throw error
-        }
+      if (!data) {
+        // Wallet doesn't exist, create it
+        const { data: newWallet, error: insertError } = await supabase
+          .from("wallets")
+          .insert({
+            character_id: activeCharacter.id,
+            platinum: 0,
+            gold: 0,
+            electrum: 0,
+            silver: 0,
+            copper: 0,
+          })
+          .select()
+          .single()
+
+        if (insertError) throw insertError
+        setWallet({ PP: 0, GP: 0, EP: 0, SP: 0, CP: 0 })
+        setTotalWealth(0)
       } else {
         setWallet({
           PP: data.platinum,
@@ -118,25 +123,42 @@ export function WalletManager({ language }: WalletManagerProps) {
 
       if (error) throw error
 
-      const { error: movementError } = await supabase.from("movements").insert({
-        character_id: activeCharacter.id,
-        from_currency: currency,
-        to_currency: currency,
-        amount_from: amount, // Always positive
-        amount_to: amount, // Always positive
-        movement_type: movementType,
-      })
+      await supabase
+        .from("movements")
+        .insert({
+          character_id: activeCharacter.id,
+          from_currency: currency,
+          to_currency: currency,
+          amount_from: amount,
+          amount_to: amount,
+          movement_type: movementType,
+        })
+        .catch((err) => {
+          console.error("Error recording movement:", err)
+        })
 
-      if (movementError) {
-        console.error("Error recording movement:", movementError)
+      const currencyValues: Record<CurrencyType, number> = {
+        PP: 1000,
+        GP: 100,
+        EP: 50,
+        SP: 10,
+        CP: 1,
       }
 
-      if (data) {
-        setTotalWealth(Number.parseFloat(data.total_wealth) || 0)
-      }
+      const totalInCP =
+        updatedWallet.PP * currencyValues.PP +
+        updatedWallet.GP * currencyValues.GP +
+        updatedWallet.EP * currencyValues.EP +
+        updatedWallet.SP * currencyValues.SP +
+        updatedWallet.CP * currencyValues.CP
+
+      const totalInGP = totalInCP / 100
+      setTotalWealth(totalInGP)
+      setMessage({ type: "success", text: t.wallet.success })
     } catch (error) {
       console.error("Error saving wallet:", error)
       setMessage({ type: "error", text: "Error saving wallet to database" })
+      throw error
     }
   }
 
@@ -155,11 +177,21 @@ export function WalletManager({ language }: WalletManagerProps) {
       return
     }
 
-    const updatedWallet = { ...wallet, [currency]: wallet[currency] + amt }
-    setWallet(updatedWallet)
-    await saveWalletToSupabase(updatedWallet, "add", currency, amt)
-    setMessage({ type: "success", text: t.wallet.success })
-    setAmount("")
+    setIsLoading(true)
+    try {
+      const updatedWallet = { ...wallet, [currency]: wallet[currency] + amt }
+      console.log("[v0] Saving wallet:", { character: activeCharacter?.id, updatedWallet, currency, amt })
+
+      await saveWalletToSupabase(updatedWallet, "add", currency, amt)
+      setWallet(updatedWallet)
+      setAmount("")
+      console.log("[v0] Wallet saved successfully")
+    } catch (error) {
+      console.error("[v0] Error in handleAdd:", error)
+      setMessage({ type: "error", text: `Error: ${error instanceof Error ? error.message : "Unknown error"}` })
+    } finally {
+      setIsLoading(false)
+    }
   }
 
   const handleRemove = async () => {
@@ -174,11 +206,21 @@ export function WalletManager({ language }: WalletManagerProps) {
       return
     }
 
-    const updatedWallet = { ...wallet, [currency]: wallet[currency] - amt }
-    setWallet(updatedWallet)
-    await saveWalletToSupabase(updatedWallet, "remove", currency, amt)
-    setMessage({ type: "success", text: t.wallet.success })
-    setAmount("")
+    setIsLoading(true)
+    try {
+      const updatedWallet = { ...wallet, [currency]: wallet[currency] - amt }
+      console.log("[v0] Removing wallet:", { character: activeCharacter?.id, updatedWallet, currency, amt })
+
+      await saveWalletToSupabase(updatedWallet, "remove", currency, amt)
+      setWallet(updatedWallet)
+      setAmount("")
+      console.log("[v0] Wallet removed successfully")
+    } catch (error) {
+      console.error("[v0] Error in handleRemove:", error)
+      setMessage({ type: "error", text: `Error: ${error instanceof Error ? error.message : "Unknown error"}` })
+    } finally {
+      setIsLoading(false)
+    }
   }
 
   const hasCharacter = !!activeCharacter

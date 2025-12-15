@@ -4,8 +4,14 @@ import { createContext, useContext, useState, useEffect, type ReactNode } from "
 import { createBrowserClient } from "@/lib/supabase/client"
 import type { User } from "@supabase/supabase-js"
 
+interface UserProfile {
+  id: string
+  display_name: string
+}
+
 interface AuthContextType {
   user: User | null
+  profile: UserProfile | null
   loading: boolean
 }
 
@@ -13,65 +19,48 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [profile, setProfile] = useState<UserProfile | null>(null)
+  const [loading, setLoading] = useState(false)
 
   useEffect(() => {
-    let mounted = true
+    let isMounted = true
+    const supabase = createBrowserClient()
 
-    async function initAuth() {
+    const loadSession = async () => {
       try {
-        console.log("[v0] Initializing auth context")
-        const supabase = createBrowserClient()
-
-        const sessionPromise = supabase.auth.getSession()
-        const timeoutPromise = new Promise((_, reject) =>
-          setTimeout(() => reject(new Error("Session fetch timeout")), 5000),
-        )
-
         const {
           data: { session },
           error,
-        } = (await Promise.race([sessionPromise, timeoutPromise])) as any
+        } = await supabase.auth.getSession()
 
         if (error) {
-          console.error("[v0] Error getting session:", error.message)
+          console.error("[v0] Auth error:", error.message)
+          return
         }
 
-        if (mounted) {
-          setUser(session?.user ?? null)
-          console.log("[v0] Initial session loaded:", session?.user ? "authenticated" : "not authenticated")
+        if (isMounted && session?.user) {
+          setUser(session.user)
+
+          // Load user profile
+          const { data: profileData } = await supabase.from("profiles").select("*").eq("id", session.user.id).single()
+
+          if (isMounted && profileData) {
+            setProfile(profileData)
+          }
         }
-      } catch (error: any) {
-        console.error("[v0] Error initializing auth:", error?.message || error)
-        if (mounted) {
-          setUser(null)
-        }
-      } finally {
-        if (mounted) {
-          setLoading(false)
-        }
+      } catch (error) {
+        console.error("[v0] Session load error:", error)
       }
     }
 
-    initAuth()
-
-    const supabase = createBrowserClient()
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      console.log("[v0] Auth state changed:", _event, session?.user ? "authenticated" : "not authenticated")
-      if (mounted) {
-        setUser(session?.user ?? null)
-      }
-    })
+    loadSession()
 
     return () => {
-      mounted = false
-      subscription.unsubscribe()
+      isMounted = false
     }
   }, [])
 
-  return <AuthContext.Provider value={{ user, loading }}>{children}</AuthContext.Provider>
+  return <AuthContext.Provider value={{ user, profile, loading }}>{children}</AuthContext.Provider>
 }
 
 export function useAuth() {

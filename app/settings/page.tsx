@@ -1,51 +1,23 @@
-"use client"
-
-import { useLanguage } from "@/lib/language-context"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Label } from "@/components/ui/label"
-import { LanguageSelector } from "@/components/language-selector"
+import { redirect } from "next/navigation"
+import { createClient } from "@/lib/supabase/server"
 import { AppLayout } from "@/components/app-layout"
+import SettingsPageContent from "./settings-content"
 
-export default function SettingsPage() {
-  const { t, language, setLanguage } = useLanguage()
+export default async function SettingsPage() {
+  const supabase = await createClient()
+
+  const {
+    data: { user },
+    error,
+  } = await supabase.auth.getUser()
+
+  if (error || !user) {
+    redirect("/auth/login")
+  }
 
   return (
-    <AppLayout activeModule="settings">
-      <div className="w-full max-w-4xl mx-auto">
-        <h1 className="text-3xl font-bold mb-6">{t.userMenu.settings}</h1>
-
-        <div className="grid gap-6">
-          {/* Language Settings Card */}
-          <Card>
-            <CardHeader>
-              <CardTitle>{t.settings?.languagePreferences || "Language Preferences"}</CardTitle>
-              <CardDescription>
-                {t.settings?.chooseLanguage || "Choose your preferred language for the interface"}
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid gap-2">
-                <Label>{t.settings?.interfaceLanguage || "Interface Language"}</Label>
-                <LanguageSelector language={language} onLanguageChange={setLanguage} />
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Future Settings Placeholder */}
-          <Card>
-            <CardHeader>
-              <CardTitle>{t.settings?.additionalSettings || "Additional Settings"}</CardTitle>
-              <CardDescription>{t.settings?.comingSoon || "More customization options coming soon"}</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <p className="text-sm text-muted-foreground">
-                {t.settings?.futureSettings ||
-                  "Future settings like theme preferences, notifications, and campaign defaults will appear here."}
-              </p>
-            </CardContent>
-          </Card>
-        </div>
-      </div>
+    <AppLayout>
+      <SettingsPageContent />
     </AppLayout>
   )
 }

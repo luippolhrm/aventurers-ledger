@@ -23,6 +23,7 @@ export function createBrowserClient() {
   }
 
   console.log("[v0] Initializing Supabase client with URL:", supabaseUrl)
+  console.log("[v0] Supabase Anon Key configured: YES")
 
   try {
     client = createSupabaseBrowserClient(supabaseUrl, supabaseAnonKey, {

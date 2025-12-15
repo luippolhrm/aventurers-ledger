@@ -1,7 +1,7 @@
 "use client"
 
 import { cn } from "@/lib/utils"
-import { Coins, Menu, X, Users, Home, DollarSign, Package, Map } from "lucide-react"
+import { Coins, Menu, X, Users, Home, DollarSign, Package, Map, Settings, User, Store } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useState } from "react"
 import { type Language, translations } from "@/lib/translations"
@@ -10,13 +10,14 @@ interface SidebarProps {
   activeModule: string
   onModuleChange: (module: string) => void
   language: Language
+  includeProfileSettings?: boolean
 }
 
-export function Sidebar({ activeModule, onModuleChange, language }: SidebarProps) {
+export function Sidebar({ activeModule, onModuleChange, language, includeProfileSettings = false }: SidebarProps) {
   const [isMobileOpen, setIsMobileOpen] = useState(false)
   const t = translations[language]
 
-  const modules = [
+  const mainModules = [
     {
       id: "welcome",
       name: t.sidebar.welcome,
@@ -43,11 +44,32 @@ export function Sidebar({ activeModule, onModuleChange, language }: SidebarProps
       icon: Package,
     },
     {
+      id: "marketplace",
+      name: t.sidebar.marketplace,
+      icon: Store,
+    },
+    {
       id: "currency-converter",
       name: t.sidebar.currencyConverter,
       icon: Coins,
     },
   ]
+
+  const allModules = includeProfileSettings
+    ? [
+        ...mainModules,
+        {
+          id: "profile",
+          name: t.userMenu.profile,
+          icon: User,
+        },
+        {
+          id: "settings",
+          name: t.userMenu.settings,
+          icon: Settings,
+        },
+      ]
+    : mainModules
 
   const SidebarContent = () => (
     <div className="flex flex-col h-full">
@@ -59,7 +81,7 @@ export function Sidebar({ activeModule, onModuleChange, language }: SidebarProps
 
       <nav className="flex-1 p-4">
         <ul className="space-y-2">
-          {modules.map((module) => {
+          {allModules.map((module) => {
             const Icon = module.icon
             return (
               <li key={module.id}>
@@ -83,9 +105,11 @@ export function Sidebar({ activeModule, onModuleChange, language }: SidebarProps
           })}
         </ul>
 
-        <div className="mt-8 p-4 bg-muted rounded-lg">
-          <p className="text-sm text-muted-foreground text-center">{t.sidebar.comingSoon}</p>
-        </div>
+        {!includeProfileSettings && (
+          <div className="mt-8 p-4 bg-muted rounded-lg">
+            <p className="text-sm text-muted-foreground text-center">{t.sidebar.comingSoon}</p>
+          </div>
+        )}
       </nav>
     </div>
   )

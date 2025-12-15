@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { createBrowserClient } from "@/lib/supabase/client"
+import { useAuth } from "@/lib/auth-context"
 import { type Language, translations } from "@/lib/translations"
 import { Loader2, UserPlus, AlertCircle, RefreshCw } from "lucide-react"
 
@@ -15,6 +16,7 @@ interface CharacterManagerProps {
 }
 
 interface Character {
+  id: string
   name: string
   race: string
 }
@@ -29,16 +31,22 @@ export function CharacterManager({ language }: CharacterManagerProps) {
   const [existingCharacter, setExistingCharacter] = useState<Character | null>(null)
 
   const t = translations[language]
+  const { user } = useAuth()
   const supabase = createBrowserClient()
 
   useEffect(() => {
     checkForExistingCharacters()
-  }, [])
+  }, [user])
 
   const checkForExistingCharacters = async () => {
     setCheckingCharacters(true)
     try {
-      const { data, error } = await supabase.from("characters").select("*").limit(1).single()
+      if (!user) {
+        setHasCharacters(false)
+        return
+      }
+
+      const { data, error } = await supabase.from("characters").select("*").eq("user_id", user.id).limit(1).single()
 
       if (error) {
         if (error.code === "PGRST116") {
@@ -68,6 +76,11 @@ export function CharacterManager({ language }: CharacterManagerProps) {
       return
     }
 
+    if (!user) {
+      setMessage({ type: "error", text: "No user logged in" })
+      return
+    }
+
     setLoading(true)
     try {
       if (existingCharacter) {
@@ -78,15 +91,16 @@ export function CharacterManager({ language }: CharacterManagerProps) {
             name: characterName.trim(),
             race: race.trim(),
           })
-          .eq("name", existingCharacter.name)
+          .eq("id", existingCharacter.id)
 
         if (error) throw error
 
         setMessage({ type: "success", text: t.character.updated })
-        setExistingCharacter({ name: characterName.trim(), race: race.trim() })
+        setExistingCharacter({ ...existingCharacter, name: characterName.trim(), race: race.trim() })
       } else {
-        // Create new character
+        // Create new character - Include user_id when inserting
         const { error } = await supabase.from("characters").insert({
+          user_id: user.id,
           name: characterName.trim(),
           race: race.trim(),
         })
@@ -95,7 +109,7 @@ export function CharacterManager({ language }: CharacterManagerProps) {
 
         setMessage({ type: "success", text: t.character.success })
         setHasCharacters(true)
-        setExistingCharacter({ name: characterName.trim(), race: race.trim() })
+        setExistingCharacter({ id: "", name: characterName.trim(), race: race.trim() })
       }
     } catch (error) {
       console.error("[v0] Error saving character:", error)

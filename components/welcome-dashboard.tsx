@@ -23,12 +23,12 @@ interface Character {
 }
 
 interface WalletData {
-  platinum: number
-  gold: number
-  electrum: number
-  silver: number
-  copper: number
-  total_wealth: number
+  platinum: number | null
+  gold: number | null
+  electrum: number | null
+  silver: number | null
+  copper: number | null
+  total_wealth: number | null
 }
 
 interface Movement {
@@ -50,7 +50,6 @@ export function WelcomeDashboard({ language, onNavigate }: WelcomeDashboardProps
 
   useEffect(() => {
     if (activeCharacter) {
-      console.log("[v0] Dashboard: Active character changed:", activeCharacter)
       loadData()
     } else {
       setCharacter(null)
@@ -68,7 +67,6 @@ export function WelcomeDashboard({ language, onNavigate }: WelcomeDashboardProps
 
     try {
       const supabase = createBrowserClient()
-      console.log("[v0] Dashboard: Setting character from activeCharacter:", activeCharacter)
       setCharacter(activeCharacter)
 
       const { data: walletData, error: walletError } = await supabase
@@ -210,14 +208,16 @@ export function WelcomeDashboard({ language, onNavigate }: WelcomeDashboardProps
           <CardContent>
             {wallet ? (
               <>
-                <div className="p-4 bg-gradient-to-br from-accent/20 to-primary/20 rounded-lg text-center">
+                <div className="p-4 bg-gradient-to-br from-accent/20 to-primary/20 rounded-lg text-center mb-4">
                   <p className="text-sm text-muted-foreground mb-1">{t.welcome.totalWealth}</p>
-                  <p className="text-3xl font-bold">{wallet.total_wealth.toFixed(2)} GP</p>
+                  <p className="text-3xl font-bold">
+                    {wallet.total_wealth > 0 ? `${wallet.total_wealth.toFixed(2)} GP` : "—"}
+                  </p>
                 </div>
 
-                <div className="space-y-2">
+                <div className="space-y-2 mb-4">
                   <p className="text-sm font-medium text-muted-foreground">{t.welcome.coinBreakdown}</p>
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className="grid grid-cols-2 gap-3">
                     {Object.entries({
                       platinum: wallet.platinum,
                       gold: wallet.gold,
@@ -225,15 +225,24 @@ export function WelcomeDashboard({ language, onNavigate }: WelcomeDashboardProps
                       silver: wallet.silver,
                       copper: wallet.copper,
                     }).map(([currency, amount]) => (
-                      <div key={currency} className="flex items-center gap-2 p-2 bg-muted rounded">
-                        <span>{currencyIcons[currency as keyof typeof currencyIcons]}</span>
-                        <span className="text-sm font-medium">{amount}</span>
+                      <div
+                        key={currency}
+                        className="flex items-center gap-2 p-3 bg-muted rounded-lg border border-border hover:border-primary transition-colors"
+                      >
+                        <span className="text-lg">{currencyIcons[currency as keyof typeof currencyIcons]}</span>
+                        <span className="text-sm font-medium">
+                          {amount === null || amount === undefined || amount < 0 ? "—" : Math.round(amount)}
+                        </span>
                       </div>
                     ))}
                   </div>
                 </div>
 
-                <Button variant="outline" className="w-full gap-2 bg-transparent" onClick={() => onNavigate("wallet")}>
+                <Button
+                  variant="outline"
+                  className="w-full gap-2 bg-transparent hover:bg-muted transition-colors"
+                  onClick={() => onNavigate("finances")}
+                >
                   <Coins className="w-4 h-4" />
                   {t.sidebar.wallet}
                 </Button>

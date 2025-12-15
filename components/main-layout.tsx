@@ -1,9 +1,9 @@
 "use client"
 
 import { useState } from "react"
+import { DashboardOverview } from "@/components/dashboard-overview"
 import { CurrencyExchangeCard } from "@/components/currency-exchange-card"
 import { CharactersUnified } from "@/components/characters-unified"
-import { WelcomeDashboard } from "@/components/welcome-dashboard"
 import { CharacterSelector } from "@/components/character-selector"
 import { UserMenu } from "@/components/user-menu"
 import { Sidebar } from "@/components/sidebar"
@@ -11,6 +11,7 @@ import { Finances } from "@/components/finances"
 import { Inventory } from "@/components/inventory"
 import { Campaigns } from "@/components/campaigns"
 import { useLanguage } from "@/lib/language-context"
+import { Marketplace } from "@/components/marketplace"
 
 export function MainLayout() {
   const [activeModule, setActiveModule] = useState("welcome")
@@ -32,12 +33,13 @@ export function MainLayout() {
         </header>
 
         <main className="flex-1 flex items-center justify-center p-4 md:p-8">
-          {activeModule === "welcome" && <WelcomeDashboard language={language} onNavigate={setActiveModule} />}
+          {activeModule === "welcome" && <DashboardOverview language={language} onNavigate={setActiveModule} />}
           {activeModule === "campaigns" && <Campaigns language={language} />}
           {activeModule === "characters" && <CharactersUnified language={language} />}
           {activeModule === "currency-converter" && <CurrencyExchangeCard language={language} />}
           {activeModule === "finances" && <Finances language={language} />}
           {activeModule === "inventory" && <Inventory language={language} />}
+          {activeModule === "marketplace" && <Marketplace language={language} />}
         </main>
 
         <footer className="py-6 px-4 text-center text-sm text-muted-foreground border-t border-border">

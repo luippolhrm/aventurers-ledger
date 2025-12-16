@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
+import { useRouter } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
@@ -14,7 +15,7 @@ import { useActiveCharacter } from "@/lib/active-character-context"
 import { type Language, translations } from "@/lib/translations"
 import { CharacterSelector } from "@/components/character-selector"
 import { ShopCatalog } from "@/components/shop-catalog"
-import { MapPin, Store, Sparkles, Users } from "lucide-react"
+import { MapPin, Store, Sparkles, Users, Package } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 
 const LOCATION_TYPE_OPTIONS = ["village", "forest", "camp", "port", "ruins", "city"] as const
@@ -66,6 +67,7 @@ const getShopTypeLabel = (type: ShopType, map?: MarketplaceTranslation) => map?.
 
 export function LocationsMap({ language }: LocationsMapProps) {
   const t = translations[language]
+  const router = useRouter()
   const supabase = createBrowserClient()
   const { user } = useAuth()
   const { activeCharacterId } = useActiveCharacter()
@@ -434,9 +436,15 @@ export function LocationsMap({ language }: LocationsMapProps) {
               {t.marketplace?.npcTitle || "NPCs"}
             </h3>
             {isGm && selectedShopId && (
-              <Button size="sm" onClick={() => openNpcDialog()}>
-                {t.marketplace?.addNpc || "Add NPC"}
-              </Button>
+              <div className="flex gap-2">
+                <Button size="sm" variant="outline" onClick={() => router.push(`/shop-items/${selectedShopId}`)}>
+                  <Package className="w-4 h-4 mr-2" />
+                  {t.marketplace?.manageItems || "Manage Items"}
+                </Button>
+                <Button size="sm" onClick={() => openNpcDialog()}>
+                  {t.marketplace?.addNpc || "Add NPC"}
+                </Button>
+              </div>
             )}
           </div>
           <p className="text-xs text-muted-foreground">

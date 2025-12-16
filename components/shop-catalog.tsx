@@ -19,6 +19,14 @@ interface ShopItem {
   price_in_copper: number
   weight: number
   quantity_available: number
+  image_url?: string | null
+  rarity?: string | null
+  item_category?: string | null
+  damage_dice?: string | null
+  damage_type?: string | null
+  armor_class?: number | null
+  properties?: string[] | null
+  attunement?: boolean | null
 }
 
 interface ShopCatalogProps {
@@ -175,16 +183,69 @@ export function ShopCatalog({ language, shopId, characterId }: ShopCatalogProps)
         {items.map((item) => (
           <Card key={item.id} className="hover:shadow-lg transition-shadow">
             <CardHeader>
-              <div className="flex justify-between items-start">
+              <div className="flex gap-4 items-start">
+                {item.image_url && (
+                  <div className="w-24 h-24 flex-shrink-0 rounded-md overflow-hidden bg-muted">
+                    <img src={item.image_url} alt={item.item_name} className="w-full h-full object-cover" />
+                  </div>
+                )}
                 <div className="flex-1">
-                  <CardTitle>{item.item_name}</CardTitle>
-                  <CardDescription>{item.item_type}</CardDescription>
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex-1">
+                      <CardTitle className="flex items-center gap-2">
+                        {item.item_name}
+                        {item.rarity && (
+                          <span className={`text-xs px-2 py-1 rounded-full ${getRarityColor(item.rarity)}`}>
+                            {item.rarity}
+                          </span>
+                        )}
+                      </CardTitle>
+                      <CardDescription>
+                        {item.item_type}
+                        {item.item_category && ` • ${item.item_category}`}
+                      </CardDescription>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-lg font-bold">{(item.price_in_copper / 100).toFixed(2)} gp</p>
+                      <p className="text-xs text-muted-foreground">Stock: {item.quantity_available}</p>
+                    </div>
+                  </div>
                   <p className="text-sm text-muted-foreground mt-2">{item.description}</p>
-                </div>
-                <div className="text-right">
-                  <p className="text-lg font-bold">{(item.price_in_copper / 100).toFixed(2)} gp</p>
-                  <p className="text-sm text-muted-foreground">Weight: {item.weight}</p>
-                  <p className="text-sm text-muted-foreground">Stock: {item.quantity_available}</p>
+                  
+                  {/* Stats */}
+                  {(item.damage_dice || item.armor_class) && (
+                    <div className="flex gap-4 mt-2 text-sm">
+                      {item.damage_dice && (
+                        <div>
+                          <span className="font-semibold">Damage:</span> {item.damage_dice}
+                          {item.damage_type && ` (${item.damage_type})`}
+                        </div>
+                      )}
+                      {item.armor_class && (
+                        <div>
+                          <span className="font-semibold">AC:</span> {item.armor_class}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Properties */}
+                  {item.properties && item.properties.length > 0 && (
+                    <div className="flex flex-wrap gap-1 mt-2">
+                      {item.properties.map((prop, idx) => (
+                        <span key={idx} className="text-xs px-2 py-1 rounded-md bg-secondary">
+                          {prop}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Attunement */}
+                  {item.attunement && (
+                    <div className="text-xs text-amber-600 dark:text-amber-400 mt-2">
+                      ⚠️ Requires Attunement
+                    </div>
+                  )}
                 </div>
               </div>
             </CardHeader>
@@ -244,4 +305,16 @@ export function ShopCatalog({ language, shopId, characterId }: ShopCatalogProps)
       </Dialog>
     </div>
   )
+}
+
+function getRarityColor(rarity: string): string {
+  const colors: Record<string, string> = {
+    common: "bg-gray-200 text-gray-800 dark:bg-gray-700 dark:text-gray-200",
+    uncommon: "bg-green-200 text-green-800 dark:bg-green-700 dark:text-green-200",
+    rare: "bg-blue-200 text-blue-800 dark:bg-blue-700 dark:text-blue-200",
+    very_rare: "bg-purple-200 text-purple-800 dark:bg-purple-700 dark:text-purple-200",
+    legendary: "bg-orange-200 text-orange-800 dark:bg-orange-700 dark:text-orange-200",
+    artifact: "bg-red-200 text-red-800 dark:bg-red-700 dark:text-red-200",
+  }
+  return colors[rarity.toLowerCase()] || colors.common
 }

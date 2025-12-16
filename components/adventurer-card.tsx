@@ -10,9 +10,11 @@ interface AdventurerCardProps {
 }
 
 export function AdventurerCard({ name, race, wealth, onSelect }: AdventurerCardProps) {
-  const goldPieces = Math.floor(wealth / 100)
-  const silverPieces = Math.floor((wealth % 100) / 10)
-  const copperPieces = Math.floor(wealth % 10)
+  // wealth is already in GP (Gold Pieces), not CP (Copper Pieces)
+  // The database stores total_wealth as: (platinum * 10) + gold + (electrum * 0.5) + (silver * 0.1) + (copper * 0.01)
+  const goldPieces = Math.floor(wealth)
+  const silverPieces = Math.floor((wealth % 1) * 10)
+  const copperPieces = Math.floor((wealth % 0.1) * 100)
 
   return (
     <div

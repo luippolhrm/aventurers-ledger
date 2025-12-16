@@ -54,21 +54,36 @@ export function DashboardOverview({ language, onNavigate }: DashboardOverviewPro
     try {
       const supabase = createBrowserClient()
 
-      // Load characters with wealth
-      const { data: chars } = await supabase
+      // Load characters
+      const { data: chars, error: charsError } = await supabase
         .from("characters")
-        .select("id, name, race, wallets(total_wealth)")
+        .select("id, name, race")
         .eq("user_id", user.id)
         .order("name", { ascending: true })
 
-      if (chars) {
-        const charsWithWealth = chars.map((char: any) => ({
-          id: char.id,
-          name: char.name,
-          race: char.race,
-          total_wealth: char.wallets?.[0]?.total_wealth || 0,
-        }))
+      if (chars && chars.length > 0) {
+        // Load wallets for all characters
+        const characterIds = chars.map((char) => char.id)
+        const { data: wallets, error: walletsError } = await supabase
+          .from("wallets")
+          .select("character_id, total_wealth")
+          .in("character_id", characterIds)
+
+        // Combine characters with their wallets
+        const charsWithWealth = chars.map((char: any) => {
+          const wallet = wallets?.find((w: any) => w.character_id === char.id)
+          return {
+            id: char.id,
+            name: char.name,
+            race: char.race,
+            total_wealth: wallet?.total_wealth ?? 0,
+          }
+        })
+        
         setCharactersWithWealth(charsWithWealth)
+      } else if (chars) {
+        // No characters found
+        setCharactersWithWealth([])
       }
 
       // Load campaigns where user is member

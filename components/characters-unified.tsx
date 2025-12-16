@@ -31,6 +31,8 @@ import {
   RotateCcw,
   ArrowLeft,
   Eye,
+  Coins,
+  Package,
 } from "lucide-react"
 
 interface CharactersUnifiedProps {
@@ -71,6 +73,8 @@ export function CharactersUnified({ language }: CharactersUnifiedProps) {
   const [level, setLevel] = useState<number>(1)
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null)
   const [saving, setSaving] = useState(false)
+  const [wallet, setWallet] = useState<{ platinum: number; gold: number; electrum: number; silver: number; copper: number; total_wealth: number } | null>(null)
+  const [inventoryItems, setInventoryItems] = useState<any[]>([])
   const { activeCharacterId, setActiveCharacterId, triggerRefresh } = useActiveCharacter()
   const t = translations[language]
 
@@ -134,6 +138,32 @@ export function CharactersUnified({ language }: CharactersUnifiedProps) {
 
       if (error) throw error
       setSelectedCharacter(data)
+      
+      // Load wallet
+      const { data: walletData, error: walletError } = await supabase
+        .from("wallets")
+        .select("*")
+        .eq("character_id", characterId)
+        .maybeSingle()
+      
+      if (!walletError && walletData) {
+        setWallet(walletData)
+      } else {
+        setWallet(null)
+      }
+      
+      // Load inventory items
+      const { data: inventoryData, error: inventoryError } = await supabase
+        .from("inventory")
+        .select("*")
+        .eq("character_id", characterId)
+        .order("item_name", { ascending: true })
+      
+      if (!inventoryError && inventoryData) {
+        setInventoryItems(inventoryData)
+      } else {
+        setInventoryItems([])
+      }
     } catch (error) {
       console.error("[v0] Error loading character:", error)
     }
@@ -417,6 +447,94 @@ export function CharactersUnified({ language }: CharactersUnifiedProps) {
                 <p className="text-sm font-medium text-muted-foreground">Preparation Notes</p>
                 <p className="text-muted-foreground whitespace-pre-wrap">{selectedCharacter.preparation_notes}</p>
                 </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Finances Section */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Coins className="w-5 h-5" />
+                {t.wallet.title || "Finances"}
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {wallet ? (
+                <div className="space-y-4">
+                  <div className="grid grid-cols-5 gap-3">
+                    <div className="text-center p-3 bg-muted rounded-lg">
+                      <div className="text-xs text-muted-foreground mb-1">PP</div>
+                      <div className="text-lg font-bold">{wallet.platinum}</div>
+                    </div>
+                    <div className="text-center p-3 bg-muted rounded-lg">
+                      <div className="text-xs text-muted-foreground mb-1">GP</div>
+                      <div className="text-lg font-bold">{wallet.gold}</div>
+                    </div>
+                    <div className="text-center p-3 bg-muted rounded-lg">
+                      <div className="text-xs text-muted-foreground mb-1">EP</div>
+                      <div className="text-lg font-bold">{wallet.electrum}</div>
+                    </div>
+                    <div className="text-center p-3 bg-muted rounded-lg">
+                      <div className="text-xs text-muted-foreground mb-1">SP</div>
+                      <div className="text-lg font-bold">{wallet.silver}</div>
+                    </div>
+                    <div className="text-center p-3 bg-muted rounded-lg">
+                      <div className="text-xs text-muted-foreground mb-1">CP</div>
+                      <div className="text-lg font-bold">{wallet.copper}</div>
+                    </div>
+                  </div>
+                  <div className="pt-3 border-t">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium text-muted-foreground">{t.wallet.totalWealth || "Total Wealth"}</span>
+                      <span className="text-xl font-bold">
+                        {Number.isInteger(wallet.total_wealth) ? wallet.total_wealth : wallet.total_wealth.toFixed(2)} GP
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-muted-foreground">{t.wallet.noWallet || "No wallet data available"}</p>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Equipment/Inventory Section */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Package className="w-5 h-5" />
+                {t.inventory.title || "Equipment & Inventory"}
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {inventoryItems.length > 0 ? (
+                <div className="space-y-2">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                    {inventoryItems.slice(0, 6).map((item: any) => (
+                      <div key={item.id} className="p-3 bg-muted rounded-lg border">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="font-medium">{item.item_name}</p>
+                            {item.quantity && item.quantity > 1 && (
+                              <p className="text-xs text-muted-foreground">x{item.quantity}</p>
+                            )}
+                          </div>
+                          {item.equipped && (
+                            <span className="text-xs bg-primary/20 text-primary px-2 py-1 rounded">Equipped</span>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  {inventoryItems.length > 6 && (
+                    <p className="text-sm text-muted-foreground text-center pt-2">
+                      +{inventoryItems.length - 6} more items
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <p className="text-muted-foreground">{t.inventory.noItems || "No items in inventory"}</p>
               )}
             </CardContent>
           </Card>

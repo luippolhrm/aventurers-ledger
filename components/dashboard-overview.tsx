@@ -15,6 +15,13 @@ interface DashboardOverviewProps {
   onNavigate: (module: string) => void
 }
 
+interface CharacterFromDB {
+  id: string
+  name: string
+  race: string | null
+  archived: boolean | null
+}
+
 interface CharacterWithWealth {
   id: string
   name: string
@@ -54,34 +61,39 @@ export function DashboardOverview({ language, onNavigate }: DashboardOverviewPro
     try {
       const supabase = createBrowserClient()
 
-      // Load characters
+      // Load ONLY active (non-archived) characters
       const { data: chars, error: charsError } = await supabase
         .from("characters")
         .select("id, name, race")
         .eq("user_id", user.id)
+        .eq("archived", false)
         .order("name", { ascending: true })
+
+      if (charsError) {
+        console.error("[v0] Dashboard - Error loading characters:", charsError)
+      }
 
       if (chars && chars.length > 0) {
         // Load wallets for all characters
-        const characterIds = chars.map((char) => char.id)
+        const characterIds = chars.map((char: CharacterFromDB) => char.id)
         const { data: wallets, error: walletsError } = await supabase
           .from("wallets")
           .select("character_id, total_wealth")
           .in("character_id", characterIds)
 
-        // Combine characters with their wallets
-        const charsWithWealth = chars.map((char: any) => {
-          const wallet = wallets?.find((w: any) => w.character_id === char.id)
+        // Combinar personajes con sus billeteras
+        const charsWithWealth: CharacterWithWealth[] = chars.map((char: CharacterFromDB) => {
+          const wallet = wallets?.find((w: { character_id: string; total_wealth: number | null }) => w.character_id === char.id)
           return {
             id: char.id,
             name: char.name,
-            race: char.race,
+            race: char.race || "Unknown",
             total_wealth: wallet?.total_wealth ?? 0,
           }
         })
         
         setCharactersWithWealth(charsWithWealth)
-      } else if (chars) {
+      } else {
         // No characters found
         setCharactersWithWealth([])
       }

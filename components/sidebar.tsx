@@ -24,14 +24,14 @@ export function Sidebar({ activeModule, onModuleChange, language, includeProfile
       icon: Home,
     },
     {
-      id: "campaigns",
-      name: t.sidebar.campaigns,
-      icon: Map,
-    },
-    {
       id: "characters",
       name: t.sidebar.characters,
       icon: Users,
+    },
+    {
+      id: "campaigns",
+      name: t.sidebar.campaigns,
+      icon: Map,
     },
     {
       id: "finances",

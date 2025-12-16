@@ -176,10 +176,10 @@ export function CharactersUnified({ language }: CharactersUnifiedProps) {
       } = await supabase.auth.getUser()
 
       if (userError || !currentUser) {
-        setMessage({ type: "error", text: "You must be logged in to create a character" })
+      setMessage({ type: "error", text: "You must be logged in to create a character" })
         setSaving(false)
-        return
-      }
+      return
+    }
 
       const userId = currentUser.id
 
@@ -390,36 +390,36 @@ export function CharactersUnified({ language }: CharactersUnifiedProps) {
               </div>
             </div>
           </CardHeader>
-        </Card>
+          </Card>
 
-        {/* Character Details */}
-        <Card>
-          <CardHeader>
-            <CardTitle>{t.characterProfile.characterDetails}</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {selectedCharacter.background && (
+          {/* Character Details */}
+          <Card>
+            <CardHeader>
+              <CardTitle>{t.characterProfile.characterDetails}</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {selectedCharacter.background && (
+                <div className="space-y-1">
+                  <p className="text-sm font-medium text-muted-foreground">{t.characterProfile.background}</p>
+                  <p>{selectedCharacter.background}</p>
+                </div>
+              )}
               <div className="space-y-1">
-                <p className="text-sm font-medium text-muted-foreground">{t.characterProfile.background}</p>
-                <p>{selectedCharacter.background}</p>
+                <p className="text-sm font-medium text-muted-foreground">{t.characterProfile.experiencePoints}</p>
+                <p className="text-xl font-bold">{selectedCharacter.experience_points || 0} XP</p>
               </div>
-            )}
-            <div className="space-y-1">
-              <p className="text-sm font-medium text-muted-foreground">{t.characterProfile.experiencePoints}</p>
-              <p className="text-xl font-bold">{selectedCharacter.experience_points || 0} XP</p>
-            </div>
             <div className="space-y-1">
               <p className="text-sm font-medium text-muted-foreground">Carrying Capacity</p>
               <p className="text-xl font-bold">{selectedCharacter.carrying_capacity || 150} lbs</p>
-            </div>
+        </div>
             {selectedCharacter.preparation_notes && (
               <div className="space-y-1">
                 <p className="text-sm font-medium text-muted-foreground">Preparation Notes</p>
                 <p className="text-muted-foreground whitespace-pre-wrap">{selectedCharacter.preparation_notes}</p>
-              </div>
-            )}
-          </CardContent>
-        </Card>
+                </div>
+              )}
+            </CardContent>
+          </Card>
       </div>
     )
   }
@@ -544,23 +544,23 @@ export function CharactersUnified({ language }: CharactersUnifiedProps) {
                     }
                   />
                 </div>
-                <div className="space-y-2">
+                  <div className="space-y-2">
                   <Label htmlFor="carrying_capacity">Carrying Capacity (lbs)</Label>
-                  <Input
+                    <Input
                     id="carrying_capacity"
-                    type="number"
-                    min="0"
+                      type="number"
+                      min="0"
                     value={selectedCharacter.carrying_capacity || 150}
-                    onChange={(e) =>
+                      onChange={(e) =>
                       setSelectedCharacter({ ...selectedCharacter, carrying_capacity: Number.parseInt(e.target.value) })
-                    }
+                      }
                     placeholder="150"
-                  />
+                    />
                   <p className="text-xs text-muted-foreground">Maximum weight your character can carry for inventory system</p>
-                </div>
-                <div className="space-y-2">
+                  </div>
+                  <div className="space-y-2">
                   <Label htmlFor="avatar_url">Avatar URL</Label>
-                  <Input
+                    <Input
                     id="avatar_url"
                     type="url"
                     value={selectedCharacter.avatar_url || ""}
@@ -568,8 +568,8 @@ export function CharactersUnified({ language }: CharactersUnifiedProps) {
                     placeholder="https://example.com/avatar.jpg"
                   />
                   <p className="text-xs text-muted-foreground">URL to your character's avatar image</p>
-                </div>
-                <div className="space-y-2">
+                  </div>
+                  <div className="space-y-2">
                   <Label htmlFor="preparation_notes">Preparation Notes</Label>
                   <Textarea
                     id="preparation_notes"

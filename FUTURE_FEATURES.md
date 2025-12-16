@@ -36,7 +36,7 @@ Sistema que permite a los jugadores realizar transacciones económicas entre sí
 
 **Cambios en Base de Datos:**
 
-\`\`\`sql
+```sql
 -- Nueva tabla: transactions
 CREATE TABLE transactions (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -59,7 +59,7 @@ CREATE INDEX idx_transactions_from_character ON transactions(from_character_id);
 CREATE INDEX idx_transactions_to_character ON transactions(to_character_id);
 CREATE INDEX idx_transactions_type ON transactions(type);
 CREATE INDEX idx_transactions_status ON transactions(status);
-\`\`\`
+```
 
 **Consideraciones técnicas:**
 - Requiere sistema de autenticación para identificar jugadores únicos

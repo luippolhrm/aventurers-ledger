@@ -7,6 +7,9 @@ export interface ApiSearchResult {
   name: string
   url: string
   source?: string
+  document_slug?: string // For Open5e: sourcebook/edition identifier
+  edition?: string // Human-readable edition/sourcebook name
+  relevanceScore?: number // Internal: for sorting search results
 }
 
 export interface DndApiItem {
@@ -62,14 +65,46 @@ export interface ShopItemExtended {
   source?: 'manual' | 'openai' | 'dnd5eapi' | 'open5e'
 }
 
+/**
+ * ItemApiService
+ * 
+ * APIs utilizadas:
+ * 1. D&D 5e API (dnd5eapi.co) - Versión 1.6
+ *    - Base URL: https://www.dnd5eapi.co/api/
+ *    - Solo contiene SRD (System Reference Document)
+ *    - No requiere autenticación
+ *    - Endpoints: /equipment, /equipment/{index}
+ * 
+ * 2. Open5e API - Versión v1
+ *    - Base URL: https://api.open5e.com
+ *    - Contiene múltiples sourcebooks/ediciones
+ *    - No requiere autenticación
+ *    - Endpoints: /v1/magicitems/, /v1/magicitems/{slug}
+ *    - Soporta filtros: document__slug (edición/sourcebook)
+ */
 export class ItemApiService {
   private dnd5eApiUrl = 'https://www.dnd5eapi.co'
   private open5eApiUrl = 'https://api.open5e.com'
+  
+  // Sourcebooks/ediciones comunes en Open5e
+  private readonly open5eSourcebooks = [
+    { slug: 'basicrules', name: 'Basic Rules' },
+    { slug: 'phb', name: "Player's Handbook" },
+    { slug: 'dmg', name: "Dungeon Master's Guide" },
+    { slug: 'xgte', name: "Xanathar's Guide to Everything" },
+    { slug: 'tce', name: "Tasha's Cauldron of Everything" },
+    { slug: 'ftod', name: "Fizban's Treasury of Dragons" },
+    { slug: 'scc', name: "Strixhaven: A Curriculum of Chaos" },
+    { slug: 'egw', name: "Explorer's Guide to Wildemount" },
+    { slug: 'vrm', name: "Van Richten's Guide to Ravenloft" },
+    { slug: 'wbw', name: "The Wild Beyond the Witchlight" },
+  ]
 
   /**
-   * Search D&D 5e API for equipment
+   * Get all equipment from D&D 5e API
+   * Note: D&D 5e API only contains SRD content, no edition filter needed
    */
-  async searchDnd5eApi(query: string): Promise<ApiSearchResult[]> {
+  async getAllDnd5eApiItems(): Promise<ApiSearchResult[]> {
     try {
       const response = await fetch(`${this.dnd5eApiUrl}/api/equipment`)
       if (!response.ok) {
@@ -77,10 +112,26 @@ export class ItemApiService {
       }
 
       const data = await response.json()
-      const results: ApiSearchResult[] = data.results || []
+      return (data.results || []).map((item: ApiSearchResult) => ({
+        ...item,
+        edition: 'SRD (System Reference Document)',
+        source: 'srd',
+      }))
+    } catch (error) {
+      console.error('Error fetching all items from D&D 5e API:', error)
+      return []
+    }
+  }
 
+  /**
+   * Search D&D 5e API for equipment
+   */
+  async searchDnd5eApi(query: string): Promise<ApiSearchResult[]> {
+    try {
+      const allItems = await this.getAllDnd5eApiItems()
+      
       // Filter results by query
-      const filtered = results.filter((item: ApiSearchResult) =>
+      const filtered = allItems.filter((item: ApiSearchResult) =>
         item.name.toLowerCase().includes(query.toLowerCase())
       )
 
@@ -110,13 +161,77 @@ export class ItemApiService {
   }
 
   /**
-   * Search Open5e API for magic items and equipment
+   * Get all sourcebooks/editions available in Open5e
    */
-  async searchOpen5e(query: string): Promise<ApiSearchResult[]> {
+  getOpen5eSourcebooks(): Array<{ slug: string; name: string }> {
+    return this.open5eSourcebooks
+  }
+
+  /**
+   * Get all magic items from Open5e API (optionally filtered by sourcebook)
+   */
+  async getAllOpen5eItems(sourcebook?: string): Promise<ApiSearchResult[]> {
     try {
-      const response = await fetch(
-        `${this.open5eApiUrl}/v1/magicitems/?search=${encodeURIComponent(query)}&limit=20`
-      )
+      let url = `${this.open5eApiUrl}/v1/magicitems/?limit=1000`
+      if (sourcebook && sourcebook !== 'all') {
+        url += `&document__slug=${encodeURIComponent(sourcebook)}`
+      }
+
+      const allResults: ApiSearchResult[] = []
+      let nextUrl: string | null = url
+
+      // Handle pagination
+      while (nextUrl) {
+        const response = await fetch(nextUrl)
+        if (!response.ok) {
+          throw new Error(`Open5e API error: ${response.statusText}`)
+        }
+
+        const data = await response.json()
+        const results = data.results || []
+
+        const mapped = results.map((item: Open5eItem) => {
+          const sourcebookInfo = this.open5eSourcebooks.find(s => s.slug === item.document__slug)
+          return {
+            index: item.slug,
+            name: item.name,
+            url: `${this.open5eApiUrl}/v1/magicitems/${item.slug}`,
+            source: item.document__slug,
+            document_slug: item.document__slug,
+            edition: sourcebookInfo?.name || item.document__slug || 'Unknown',
+          }
+        })
+
+        allResults.push(...mapped)
+
+        // Check for next page
+        nextUrl = data.next || null
+        if (nextUrl && !nextUrl.startsWith('http')) {
+          nextUrl = `${this.open5eApiUrl}${nextUrl}`
+        }
+      }
+
+      return allResults
+    } catch (error) {
+      console.error('Error fetching all items from Open5e:', error)
+      return []
+    }
+  }
+
+  /**
+   * Search Open5e API for magic items and equipment
+   * The API search parameter searches across name and description, so we filter client-side
+   * to prioritize exact name matches and ensure relevance
+   */
+  async searchOpen5e(query: string, sourcebook?: string): Promise<ApiSearchResult[]> {
+    try {
+      // Use a higher limit to get more results, then filter client-side for better relevance
+      let url = `${this.open5eApiUrl}/v1/magicitems/?search=${encodeURIComponent(query)}&limit=100`
+      if (sourcebook && sourcebook !== 'all') {
+        url += `&document__slug=${encodeURIComponent(sourcebook)}`
+      }
+
+      const response = await fetch(url)
       if (!response.ok) {
         throw new Error(`Open5e API error: ${response.statusText}`)
       }
@@ -124,12 +239,59 @@ export class ItemApiService {
       const data = await response.json()
       const results = data.results || []
 
-      return results.map((item: Open5eItem) => ({
-        index: item.slug,
-        name: item.name,
-        url: `${this.open5eApiUrl}/v1/magicitems/${item.slug}`,
-        source: item.document__slug,
-      }))
+      // Map and filter results to prioritize name matches
+      const queryLower = query.toLowerCase()
+      const mapped = results.map((item: Open5eItem) => {
+        const sourcebookInfo = this.open5eSourcebooks.find(s => s.slug === item.document__slug)
+        const nameLower = item.name.toLowerCase()
+        
+        // Calculate relevance score:
+        // - Exact name match: highest priority
+        // - Name starts with query: high priority
+        // - Name contains query: medium priority
+        // - Description contains query: lower priority
+        let relevanceScore = 0
+        if (nameLower === queryLower) {
+          relevanceScore = 100 // Exact match
+        } else if (nameLower.startsWith(queryLower)) {
+          relevanceScore = 80 // Starts with query
+        } else if (nameLower.includes(queryLower)) {
+          relevanceScore = 60 // Contains query
+        } else {
+          // Only in description, lower priority
+          relevanceScore = 20
+        }
+
+        return {
+          index: item.slug,
+          name: item.name,
+          url: `${this.open5eApiUrl}/v1/magicitems/${item.slug}`,
+          source: item.document__slug,
+          document_slug: item.document__slug,
+          edition: sourcebookInfo?.name || item.document__slug || 'Unknown',
+          relevanceScore, // Add score for sorting
+        }
+      })
+
+      // Filter: only include items where name contains the query (not just description)
+      // This ensures "ring" returns rings, not items that mention "ring" in description
+      const nameMatches = mapped.filter((item) => {
+        const nameLower = item.name.toLowerCase()
+        return nameLower.includes(queryLower)
+      })
+
+      // Sort by relevance (exact matches first, then starts with, then contains)
+      nameMatches.sort((a, b) => {
+        // First sort by relevance score
+        if (b.relevanceScore !== a.relevanceScore) {
+          return b.relevanceScore - a.relevanceScore
+        }
+        // Then alphabetically
+        return a.name.localeCompare(b.name)
+      })
+
+      // Return top 50 results (prioritizing name matches)
+      return nameMatches.slice(0, 50).map(({ relevanceScore, ...item }) => item)
     } catch (error) {
       console.error('Error searching Open5e:', error)
       return []

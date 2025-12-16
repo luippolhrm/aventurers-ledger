@@ -20,9 +20,12 @@ export function ShopItemAiGenerator({ language, onItemGenerated }: ShopItemAiGen
 
   const [prompt, setPrompt] = useState("")
   const [mode, setMode] = useState<"generate" | "search">("generate")
-  const [provider, setProvider] = useState<"gemini" | "openai">("gemini")
+  // Always use Gemini as default provider
+  const provider: "gemini" = "gemini"
   const [isGenerating, setIsGenerating] = useState(false)
   const [generatedItem, setGeneratedItem] = useState<ShopItemExtended | null>(null)
+  const [searchResults, setSearchResults] = useState<ShopItemExtended[]>([])
+  const [selectedSearchItem, setSelectedSearchItem] = useState<ShopItemExtended | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   const handleGenerate = async () => {
@@ -31,6 +34,8 @@ export function ShopItemAiGenerator({ language, onItemGenerated }: ShopItemAiGen
     setIsGenerating(true)
     setError(null)
     setGeneratedItem(null)
+    setSearchResults([])
+    setSelectedSearchItem(null)
 
     try {
       const response = await fetch("/api/items/generate", {
@@ -45,31 +50,53 @@ export function ShopItemAiGenerator({ language, onItemGenerated }: ShopItemAiGen
       })
 
       if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.error || "Failed to generate item")
+        let errorData
+        try {
+          errorData = await response.json()
+        } catch {
+          errorData = {}
+        }
+        const errorMessage = errorData.details || errorData.error || `Failed to generate item (Status: ${response.status})`
+        throw new Error(errorMessage)
       }
 
       const data = await response.json()
-      setGeneratedItem(data.item)
+      
+      if (mode === "search" && data.items && Array.isArray(data.items)) {
+        // Search mode: show multiple results
+        setSearchResults(data.items)
+        if (data.items.length > 0) {
+          setSelectedSearchItem(data.items[0])
+        }
+      } else {
+        // Generate mode: show single item
+        setGeneratedItem(data.item)
+      }
     } catch (err) {
       console.error("Error generating item:", err)
-      setError(err instanceof Error ? err.message : "Unknown error occurred")
+      const errorMessage = err instanceof Error ? err.message : "Unknown error occurred"
+      setError(errorMessage)
     } finally {
       setIsGenerating(false)
     }
   }
 
-  const handleUseItem = () => {
-    if (generatedItem) {
-      onItemGenerated(generatedItem)
+  const handleUseItem = (item?: ShopItemExtended) => {
+    const itemToUse = item || generatedItem || selectedSearchItem
+    if (itemToUse) {
+      onItemGenerated(itemToUse)
       // Reset form
       setPrompt("")
       setGeneratedItem(null)
+      setSearchResults([])
+      setSelectedSearchItem(null)
     }
   }
 
   const handleRegenerate = () => {
     setGeneratedItem(null)
+    setSearchResults([])
+    setSelectedSearchItem(null)
     handleGenerate()
   }
 
@@ -77,28 +104,6 @@ export function ShopItemAiGenerator({ language, onItemGenerated }: ShopItemAiGen
     <div className="space-y-6">
       {/* Configuration */}
       <div className="space-y-4">
-        <div>
-          <Label htmlFor="ai_provider">{t.marketplace?.aiProvider || "AI Provider"}</Label>
-          <Select value={provider} onValueChange={(value) => setProvider(value as "gemini" | "openai")}>
-            <SelectTrigger id="ai_provider">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="gemini">
-                Google Gemini (Free - 15 req/min)
-              </SelectItem>
-              <SelectItem value="openai">
-                OpenAI GPT-4 (Paid - Better Quality)
-              </SelectItem>
-            </SelectContent>
-          </Select>
-          <p className="text-xs text-muted-foreground mt-1">
-            {provider === "gemini"
-              ? "✅ Free with generous limits (recommended)"
-              : "💰 Requires paid API key (~$0.01/item)"}
-          </p>
-        </div>
-
         <div>
           <Label htmlFor="ai_mode">{t.marketplace?.aiMode || "AI Mode"}</Label>
           <Select value={mode} onValueChange={(value) => setMode(value as "generate" | "search")}>
@@ -155,8 +160,160 @@ export function ShopItemAiGenerator({ language, onItemGenerated }: ShopItemAiGen
         </Card>
       )}
 
-      {/* Generated Item Preview */}
-      {generatedItem && (
+      {/* Search Results (Multiple Items) */}
+      {mode === "search" && searchResults.length > 0 && (
+        <div className="space-y-4">
+          <h3 className="text-lg font-semibold">
+            {t.marketplace?.searchResults || "Search Results"} ({searchResults.length})
+          </h3>
+          <div className="grid gap-4 md:grid-cols-2">
+            {searchResults.map((item, index) => (
+              <Card
+                key={index}
+                className={`cursor-pointer transition-all ${
+                  selectedSearchItem?.item_name === item.item_name
+                    ? "border-2 border-primary shadow-md"
+                    : "border hover:border-primary/50"
+                }`}
+                onClick={() => setSelectedSearchItem(item)}
+              >
+                <CardHeader>
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1">
+                      <CardTitle className="text-base flex items-center gap-2">
+                        {item.item_name}
+                        {item.rarity && (
+                          <span
+                            className={`text-xs px-2 py-1 rounded-full ${getRarityColor(item.rarity)}`}
+                          >
+                            {t.marketplace?.rarities?.[item.rarity] || item.rarity}
+                          </span>
+                        )}
+                      </CardTitle>
+                      <CardDescription className="mt-1">
+                        {item.item_type} {item.item_category && `• ${item.item_category}`}
+                      </CardDescription>
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-2">
+                  {item.description && (
+                    <p className="text-sm text-muted-foreground line-clamp-2">{item.description}</p>
+                  )}
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="font-semibold text-primary">
+                      {((item.price_in_copper || 0) / 100).toFixed(2)} gp
+                    </span>
+                    {item.weight && <span className="text-muted-foreground">{item.weight} lb</span>}
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+
+          {/* Selected Item Details */}
+          {selectedSearchItem && (
+            <Card className="border-primary">
+              <CardHeader>
+                <div className="flex items-start justify-between">
+                  <div className="flex-1">
+                    <CardTitle className="flex items-center gap-2">
+                      {selectedSearchItem.item_name}
+                      {selectedSearchItem.rarity && (
+                        <span
+                          className={`text-xs px-2 py-1 rounded-full ${getRarityColor(selectedSearchItem.rarity)}`}
+                        >
+                          {t.marketplace?.rarities?.[selectedSearchItem.rarity] || selectedSearchItem.rarity}
+                        </span>
+                      )}
+                    </CardTitle>
+                    <CardDescription>
+                      {selectedSearchItem.item_type}{" "}
+                      {selectedSearchItem.item_category && `• ${selectedSearchItem.item_category}`}
+                    </CardDescription>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {/* Description */}
+                {selectedSearchItem.description && (
+                  <div>
+                    <p className="text-sm text-muted-foreground whitespace-pre-wrap">
+                      {selectedSearchItem.description}
+                    </p>
+                  </div>
+                )}
+
+                {/* Stats Grid */}
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <span className="font-semibold">Price:</span>{" "}
+                    {((selectedSearchItem.price_in_copper || 0) / 100).toFixed(2)} gp
+                  </div>
+                  <div>
+                    <span className="font-semibold">Weight:</span> {selectedSearchItem.weight} lb
+                  </div>
+
+                  {selectedSearchItem.damage_dice && (
+                    <div>
+                      <span className="font-semibold">Damage:</span> {selectedSearchItem.damage_dice}
+                      {selectedSearchItem.damage_type && ` (${selectedSearchItem.damage_type})`}
+                    </div>
+                  )}
+
+                  {selectedSearchItem.armor_class && (
+                    <div>
+                      <span className="font-semibold">AC:</span> {selectedSearchItem.armor_class}
+                    </div>
+                  )}
+                </div>
+
+                {/* Properties */}
+                {selectedSearchItem.properties && selectedSearchItem.properties.length > 0 && (
+                  <div>
+                    <span className="text-sm font-semibold">Properties: </span>
+                    <div className="flex flex-wrap gap-1 mt-1">
+                      {selectedSearchItem.properties.map((prop) => (
+                        <span key={prop} className="text-xs px-2 py-1 rounded-md bg-secondary">
+                          {prop}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Requirements */}
+                {selectedSearchItem.requirements && (
+                  <div className="text-sm">
+                    <span className="font-semibold">Requirements:</span> {selectedSearchItem.requirements}
+                  </div>
+                )}
+
+                {/* Attunement */}
+                {selectedSearchItem.attunement && (
+                  <div className="text-sm text-amber-600 dark:text-amber-400">
+                    ⚠️ Requires Attunement
+                  </div>
+                )}
+
+                {/* Actions */}
+                <div className="flex gap-3 pt-4 border-t">
+                  <Button onClick={() => handleUseItem(selectedSearchItem)} className="flex-1">
+                    {t.marketplace?.useThisItem || "Use This Item"}
+                  </Button>
+                  <Button variant="outline" onClick={handleRegenerate} disabled={isGenerating}>
+                    <RefreshCw className="w-4 h-4 mr-2" />
+                    {t.marketplace?.regenerate || "Search Again"}
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </div>
+      )}
+
+      {/* Generated Item Preview (Single Item - Generate Mode) */}
+      {mode === "generate" && generatedItem && (
         <Card className="border-primary">
           <CardHeader>
             <div className="flex items-start justify-between">

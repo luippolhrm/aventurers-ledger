@@ -13,6 +13,7 @@ export type AiProvider = 'openai' | 'gemini'
 export interface AiProviderInterface {
   generateItem(prompt: string, language: Language): Promise<ShopItemExtended>
   searchOfficialItem(query: string, language: Language): Promise<ShopItemExtended>
+  searchOfficialItems(query: string, language: Language, maxResults?: number): Promise<ShopItemExtended[]>
   translateItem(item: ShopItemExtended, targetLang: Language): Promise<ShopItemExtended>
 }
 
@@ -48,7 +49,13 @@ export class OpenAiProvider implements AiProviderInterface {
   }
 
   async searchOfficialItem(query: string, language: Language): Promise<ShopItemExtended> {
-    const systemPrompt = this.getSearchSystemPrompt(language)
+    // For backward compatibility, return the first result from searchOfficialItems
+    const results = await this.searchOfficialItems(query, language, 1)
+    return results[0]
+  }
+
+  async searchOfficialItems(query: string, language: Language, maxResults: number = 5): Promise<ShopItemExtended[]> {
+    const systemPrompt = this.getSearchMultipleItemsSystemPrompt(language, maxResults)
 
     const completion = await this.openai.chat.completions.create({
       model: 'gpt-4-turbo-preview',
@@ -65,7 +72,16 @@ export class OpenAiProvider implements AiProviderInterface {
       throw new Error('No response from OpenAI')
     }
 
-    return this.parseItemData(JSON.parse(content), language)
+    const parsed = JSON.parse(content)
+    
+    // Handle both array and single object responses
+    const items = Array.isArray(parsed.items) ? parsed.items : 
+                  Array.isArray(parsed) ? parsed : 
+                  [parsed]
+    
+    return items.slice(0, maxResults).map((item: any) => 
+      this.parseItemData(item, language)
+    )
   }
 
   async translateItem(item: ShopItemExtended, targetLang: Language): Promise<ShopItemExtended> {
@@ -169,6 +185,45 @@ IMPORTANT: Respond ONLY with valid JSON in this exact format:
 Use official D&D 5e data. Translate to ${languageNames[language]} but keep original_name_en.`
   }
 
+  private getSearchMultipleItemsSystemPrompt(language: Language, maxResults: number): string {
+    const languageNames = { en: 'English', es: 'Spanish', fr: 'French', pt: 'Portuguese' }
+
+    return `You are a D&D 5e expert with knowledge of official items from Player's Handbook, Dungeon Master's Guide, and other sourcebooks.
+
+When given a search query, return a list of similar or matching official D&D 5e items.
+
+IMPORTANT: Respond ONLY with valid JSON in this exact format:
+{
+  "items": [
+    {
+      "name": "Official item name translated to ${languageNames[language]}",
+      "original_name_en": "Original English name",
+      "type": "Item type",
+      "description": "Official description translated to ${languageNames[language]}",
+      "category": "weapon/armor/potion/scroll/wondrous/tool/gear",
+      "rarity": "common/uncommon/rare/very_rare/legendary/artifact",
+      "damage_dice": "1d8 (if weapon)",
+      "damage_type": "slashing/piercing/bludgeoning/etc (if applicable)",
+      "armor_class": 15 (if armor, as number),
+      "properties": ["finesse", "light"] (array),
+      "requirements": "Strength 13 (if any)",
+      "attunement": true/false,
+      "weight": 3,
+      "price_in_copper": 50000
+    },
+    ... (up to ${maxResults} items)
+  ]
+}
+
+Guidelines:
+- Return up to ${maxResults} items that match or are similar to the search query
+- Use official D&D 5e data only
+- Translate all text to ${languageNames[language]}
+- Include the original English name in original_name_en
+- If no exact match, return similar items
+- Return an empty array [] if no items are found`
+  }
+
   private getTranslateSystemPrompt(language: Language): string {
     const languageNames = { en: 'English', es: 'Spanish', fr: 'French', pt: 'Portuguese' }
 
@@ -261,40 +316,131 @@ export class GeminiProvider implements AiProviderInterface {
 
   constructor(apiKey: string) {
     this.genAI = new GoogleGenerativeAI(apiKey)
-    this.model = this.genAI.getGenerativeModel({ model: 'gemini-1.5-flash' })
+    // Use gemini-1.5-flash which is available in the FREE tier
+    // This model works with the standard API and doesn't require billing
+    // Note: If this model is not available, try gemini-1.5-pro or check your API key configuration
+    this.model = this.genAI.getGenerativeModel({ 
+      model: 'gemini-1.5-flash',
+    })
   }
 
   async generateItem(prompt: string, language: Language): Promise<ShopItemExtended> {
     const systemPrompt = this.getGenerateSystemPrompt(language)
     const fullPrompt = `${systemPrompt}\n\nUser request: ${prompt}`
 
-    const result = await this.model.generateContent(fullPrompt)
-    const response = await result.response
-    const text = response.text()
+    try {
+      const result = await this.model.generateContent(fullPrompt)
+      const response = await result.response
+      const text = response.text()
 
-    // Extract JSON from response (Gemini might include markdown)
-    const jsonMatch = text.match(/\{[\s\S]*\}/)
-    if (!jsonMatch) {
-      throw new Error('No valid JSON in Gemini response')
+      // Extract JSON from response (Gemini might include markdown)
+      const jsonMatch = text.match(/\{[\s\S]*\}/)
+      if (!jsonMatch) {
+        throw new Error('No valid JSON in Gemini response')
+      }
+
+      return this.parseItemData(JSON.parse(jsonMatch[0]), language, 'gemini')
+    } catch (error) {
+      // If model is not available, try alternative models
+      const errorMessage = error instanceof Error ? error.message : String(error)
+      if (errorMessage.includes('not found') || errorMessage.includes('404')) {
+        // Try alternative free tier models
+        const alternativeModels = ['gemini-1.5-pro', 'gemini-pro']
+        for (const modelName of alternativeModels) {
+          try {
+            const altModel = this.genAI.getGenerativeModel({ model: modelName })
+            const result = await altModel.generateContent(fullPrompt)
+            const response = await result.response
+            const text = response.text()
+            const jsonMatch = text.match(/\{[\s\S]*\}/)
+            if (jsonMatch) {
+              // Update model for future use
+              this.model = altModel
+              return this.parseItemData(JSON.parse(jsonMatch[0]), language, 'gemini')
+            }
+          } catch {
+            continue
+          }
+        }
+        throw new Error(`Model not available. Please check your Gemini API key and ensure you have access to free tier models. Original error: ${errorMessage}`)
+      }
+      throw error
     }
-
-    return this.parseItemData(JSON.parse(jsonMatch[0]), language, 'gemini')
   }
 
   async searchOfficialItem(query: string, language: Language): Promise<ShopItemExtended> {
-    const systemPrompt = this.getSearchSystemPrompt(language)
+    // For backward compatibility, return the first result from searchOfficialItems
+    const results = await this.searchOfficialItems(query, language, 1)
+    return results[0]
+  }
+
+  async searchOfficialItems(query: string, language: Language, maxResults: number = 5): Promise<ShopItemExtended[]> {
+    const systemPrompt = this.getSearchMultipleItemsSystemPrompt(language, maxResults)
     const fullPrompt = `${systemPrompt}\n\nSearch for: ${query}`
 
-    const result = await this.model.generateContent(fullPrompt)
-    const response = await result.response
-    const text = response.text()
+    try {
+      const result = await this.model.generateContent(fullPrompt)
+      const response = await result.response
+      const text = response.text()
 
-    const jsonMatch = text.match(/\{[\s\S]*\}/)
-    if (!jsonMatch) {
-      throw new Error('No valid JSON in Gemini response')
+      // Extract JSON array from response
+      const jsonMatch = text.match(/\[[\s\S]*\]/) || text.match(/\{[\s\S]*\}/)
+      if (!jsonMatch) {
+        throw new Error('No valid JSON in Gemini response')
+      }
+
+      const parsed = JSON.parse(jsonMatch[0])
+      
+      // Handle both array and single object responses, or items array
+      let items: any[] = []
+      if (Array.isArray(parsed)) {
+        items = parsed
+      } else if (parsed.items && Array.isArray(parsed.items)) {
+        items = parsed.items
+      } else {
+        items = [parsed]
+      }
+      
+      return items.slice(0, maxResults).map((item: any) => 
+        this.parseItemData(item, language, 'gemini')
+      )
+    } catch (error) {
+      // If model is not available, try alternative models
+      const errorMessage = error instanceof Error ? error.message : String(error)
+      if (errorMessage.includes('not found') || errorMessage.includes('404')) {
+        // Try alternative free tier models
+        const alternativeModels = ['gemini-1.5-pro', 'gemini-pro']
+        for (const modelName of alternativeModels) {
+          try {
+            const altModel = this.genAI.getGenerativeModel({ model: modelName })
+            const result = await altModel.generateContent(fullPrompt)
+            const response = await result.response
+            const text = response.text()
+            const jsonMatch = text.match(/\[[\s\S]*\]/) || text.match(/\{[\s\S]*\}/)
+            if (jsonMatch) {
+              const parsed = JSON.parse(jsonMatch[0])
+              let items: any[] = []
+              if (Array.isArray(parsed)) {
+                items = parsed
+              } else if (parsed.items && Array.isArray(parsed.items)) {
+                items = parsed.items
+              } else {
+                items = [parsed]
+              }
+              // Update model for future use
+              this.model = altModel
+              return items.slice(0, maxResults).map((item: any) => 
+                this.parseItemData(item, language, 'gemini')
+              )
+            }
+          } catch {
+            continue
+          }
+        }
+        throw new Error(`Model not available. Please check your Gemini API key and ensure you have access to free tier models. Original error: ${errorMessage}`)
+      }
+      throw error
     }
-
-    return this.parseItemData(JSON.parse(jsonMatch[0]), language, 'gemini')
   }
 
   async translateItem(item: ShopItemExtended, targetLang: Language): Promise<ShopItemExtended> {
@@ -388,6 +534,43 @@ IMPORTANT: Respond ONLY with valid JSON (no markdown, no extra text) in this exa
 }
 
 Use official D&D 5e data. Translate to ${languageNames[language]}.`
+  }
+
+  private getSearchMultipleItemsSystemPrompt(language: Language, maxResults: number): string {
+    const languageNames = { en: 'English', es: 'Spanish', fr: 'French', pt: 'Portuguese' }
+
+    return `You are a D&D 5e expert with knowledge of official items from Player's Handbook, Dungeon Master's Guide, and other sourcebooks.
+
+When given a search query, return a list of similar or matching official D&D 5e items.
+
+IMPORTANT: Respond ONLY with valid JSON array (no markdown, no extra text) in this exact format:
+[
+  {
+    "name": "Official item name translated to ${languageNames[language]}",
+    "original_name_en": "Original English name",
+    "type": "Item type",
+    "description": "Official description translated to ${languageNames[language]}",
+    "category": "weapon/armor/potion/scroll/wondrous/tool/gear",
+    "rarity": "common/uncommon/rare/very_rare/legendary/artifact",
+    "damage_dice": "1d8 (if weapon)",
+    "damage_type": "slashing/piercing/bludgeoning/etc (if applicable)",
+    "armor_class": 15 (if armor, as number),
+    "properties": ["finesse", "light"] (array),
+    "requirements": "Strength 13 (if any)",
+    "attunement": true/false,
+    "weight": 3,
+    "price_in_copper": 50000
+  },
+  ... (up to ${maxResults} items)
+]
+
+Guidelines:
+- Return up to ${maxResults} items that match or are similar to the search query
+- Use official D&D 5e data only
+- Translate all text to ${languageNames[language]}
+- Include the original English name in original_name_en
+- If no exact match, return similar items
+- Return an empty array [] if no items are found`
   }
 
   private getTranslateSystemPrompt(language: Language): string {

@@ -12,7 +12,6 @@ import { useToast } from "@/hooks/use-toast"
 import { translations, type Language } from "@/lib/translations"
 import type { ShopItemExtended } from "@/lib/services/item-api-service"
 import { ShopItemForm } from "./shop-item-form"
-import { ShopItemAiGenerator } from "./shop-item-ai-generator"
 import { ShopItemApiImporter } from "./shop-item-api-importer"
 
 interface ShopItemsManagerProps {
@@ -40,7 +39,7 @@ export function ShopItemsManager({ shopId, shopName, language, isGm }: ShopItems
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [editingItem, setEditingItem] = useState<ShopItemRow | null>(null)
   const [isSaving, setIsSaving] = useState(false)
-  const [creationMethod, setCreationMethod] = useState<"manual" | "ai" | "api">("manual")
+  const [creationMethod, setCreationMethod] = useState<"manual" | "api">("manual")
 
   useEffect(() => {
     loadItems()
@@ -154,11 +153,6 @@ export function ShopItemsManager({ shopId, shopName, language, isGm }: ShopItems
     }
   }
 
-  const handleAiGenerated = (item: ShopItemExtended) => {
-    // Automatically save AI-generated item
-    handleSaveItem(item)
-  }
-
   const handleApiImported = (item: ShopItemExtended) => {
     // Automatically save API-imported item
     handleSaveItem(item)
@@ -230,7 +224,7 @@ export function ShopItemsManager({ shopId, shopName, language, isGm }: ShopItems
                 </div>
                 {item.source && (
                   <div className="text-xs text-muted-foreground">
-                    Source: {item.source === "manual" ? "Manual" : item.source === "openai" ? "AI" : "API"}
+                    Source: {item.source === "manual" ? "Manual" : "API"}
                   </div>
                 )}
               </div>
@@ -247,7 +241,7 @@ export function ShopItemsManager({ shopId, shopName, language, isGm }: ShopItems
             <p className="text-lg font-semibold">{t.marketplace?.noItemsYet || "No items yet"}</p>
             <p className="text-muted-foreground mt-1">
               {isGm
-                ? "Add your first item using manual entry, AI generation, or import from APIs"
+                ? "Add your first item using manual entry or import from APIs"
                 : "The shop owner hasn't added any items yet"}
             </p>
             {isGm && (
@@ -262,7 +256,7 @@ export function ShopItemsManager({ shopId, shopName, language, isGm }: ShopItems
 
       {/* Create/Edit Dialog */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-7xl max-h-[90vh] overflow-y-auto w-[95vw]">
           <DialogHeader>
             <DialogTitle>
               {editingItem ? t.marketplace?.editItem || "Edit Item" : t.marketplace?.addItem || "Add Item"}
@@ -270,7 +264,7 @@ export function ShopItemsManager({ shopId, shopName, language, isGm }: ShopItems
             <DialogDescription>
               {editingItem
                 ? "Update the item details below"
-                : t.marketplace?.chooseCreationMethod || "Choose how to add the item"}
+                : "Add a new item manually or import from an API"}
             </DialogDescription>
           </DialogHeader>
 
@@ -286,9 +280,8 @@ export function ShopItemsManager({ shopId, shopName, language, isGm }: ShopItems
           ) : (
             // Create mode: show tabs
             <Tabs value={creationMethod} onValueChange={(v) => setCreationMethod(v as typeof creationMethod)}>
-              <TabsList className="grid w-full grid-cols-3">
+              <TabsList className="grid w-full grid-cols-2">
                 <TabsTrigger value="manual">{t.marketplace?.manualCreation || "Manual"}</TabsTrigger>
-                <TabsTrigger value="ai">{t.marketplace?.aiGeneration || "AI Generation"}</TabsTrigger>
                 <TabsTrigger value="api">{t.marketplace?.apiImport || "Import from API"}</TabsTrigger>
               </TabsList>
 
@@ -299,10 +292,6 @@ export function ShopItemsManager({ shopId, shopName, language, isGm }: ShopItems
                   onCancel={() => setIsDialogOpen(false)}
                   isLoading={isSaving}
                 />
-              </TabsContent>
-
-              <TabsContent value="ai" className="mt-6">
-                <ShopItemAiGenerator language={language} onItemGenerated={handleAiGenerated} />
               </TabsContent>
 
               <TabsContent value="api" className="mt-6">

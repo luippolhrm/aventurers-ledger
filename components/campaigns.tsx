@@ -103,7 +103,7 @@ export function Campaigns({ language }: CampaignsProps) {
       setCampaigns(campaignsWithRole)
     } catch (err: any) {
       console.error("[v0] Error loading campaigns:", err)
-      setError(err.message)
+      setError(err?.message || JSON.stringify(err) || "Failed to load campaigns")
     } finally {
       setLoading(false)
     }
@@ -146,7 +146,7 @@ export function Campaigns({ language }: CampaignsProps) {
       loadCampaigns()
     } catch (err: any) {
       console.error("[v0] Error creating campaign:", err)
-      setError(err.message || "Failed to create campaign")
+      setError(err?.message || JSON.stringify(err) || "Failed to create campaign")
     }
   }
 

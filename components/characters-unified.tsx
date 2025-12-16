@@ -31,9 +31,6 @@ import {
   RotateCcw,
   ArrowLeft,
   Eye,
-  Swords,
-  Heart,
-  BookOpen,
 } from "lucide-react"
 
 interface CharactersUnifiedProps {
@@ -49,20 +46,9 @@ interface Character {
   alignment?: string
   background?: string
   experience_points?: number
-  strength?: number
-  dexterity?: number
-  constitution?: number
-  intelligence?: number
-  wisdom?: number
-  charisma?: number
-  max_hit_points?: number
-  current_hit_points?: number
-  armor_class?: number
-  speed?: number
-  initiative_bonus?: number
-  physical_description?: string
-  personality_traits?: string
-  backstory?: string
+  carrying_capacity?: number
+  preparation_notes?: string
+  avatar_url?: string
   created_at: string
   archived: boolean
   user_id?: string
@@ -179,14 +165,23 @@ export function CharactersUnified({ language }: CharactersUnifiedProps) {
       return
     }
 
-    if (!user) {
-      setMessage({ type: "error", text: "You must be logged in to create a character" })
-      return
-    }
-
     setSaving(true)
     try {
       const supabase = createBrowserClient()
+
+      // Refrescar usuario desde Supabase por si el contexto aún no está listo
+      const {
+        data: { user: currentUser },
+        error: userError,
+      } = await supabase.auth.getUser()
+
+      if (userError || !currentUser) {
+        setMessage({ type: "error", text: "You must be logged in to create a character" })
+        setSaving(false)
+        return
+      }
+
+      const userId = currentUser.id
 
       if (editingCharacter) {
         const { error } = await supabase
@@ -210,7 +205,7 @@ export function CharactersUnified({ language }: CharactersUnifiedProps) {
             race: race.trim(),
             class: characterClass.trim() || null,
             level: level || null,
-            user_id: user.id,
+            user_id: userId,
             archived: false,
           })
           .select()
@@ -340,10 +335,6 @@ export function CharactersUnified({ language }: CharactersUnifiedProps) {
     }
   }
 
-  const calculateModifier = (score: number) => {
-    return Math.floor((score - 10) / 2)
-  }
-
   if (loading) {
     return (
       <Card className="w-full max-w-4xl shadow-xl">
@@ -401,121 +392,34 @@ export function CharactersUnified({ language }: CharactersUnifiedProps) {
           </CardHeader>
         </Card>
 
-        {/* Core Attributes */}
+        {/* Character Details */}
         <Card>
           <CardHeader>
-            <CardTitle>{t.characterProfile.coreAttributes}</CardTitle>
+            <CardTitle>{t.characterProfile.characterDetails}</CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-              {["strength", "dexterity", "constitution", "intelligence", "wisdom", "charisma"].map((attr) => {
-                const value = (selectedCharacter[attr as keyof Character] as number) || 10
-                const modifier = calculateModifier(value)
-                return (
-                  <Card key={attr} className="text-center">
-                    <CardHeader className="pb-2">
-                      <CardTitle className="text-sm">{t.characterProfile.attributes[attr]}</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="text-4xl font-bold">{value}</div>
-                      <div className="text-lg text-muted-foreground mt-1">
-                        {modifier >= 0 ? "+" : ""}
-                        {modifier}
-                      </div>
-                    </CardContent>
-                  </Card>
-                )
-              })}
+          <CardContent className="space-y-4">
+            {selectedCharacter.background && (
+              <div className="space-y-1">
+                <p className="text-sm font-medium text-muted-foreground">{t.characterProfile.background}</p>
+                <p>{selectedCharacter.background}</p>
+              </div>
+            )}
+            <div className="space-y-1">
+              <p className="text-sm font-medium text-muted-foreground">{t.characterProfile.experiencePoints}</p>
+              <p className="text-xl font-bold">{selectedCharacter.experience_points || 0} XP</p>
             </div>
+            <div className="space-y-1">
+              <p className="text-sm font-medium text-muted-foreground">Carrying Capacity</p>
+              <p className="text-xl font-bold">{selectedCharacter.carrying_capacity || 150} lbs</p>
+            </div>
+            {selectedCharacter.preparation_notes && (
+              <div className="space-y-1">
+                <p className="text-sm font-medium text-muted-foreground">Preparation Notes</p>
+                <p className="text-muted-foreground whitespace-pre-wrap">{selectedCharacter.preparation_notes}</p>
+              </div>
+            )}
           </CardContent>
         </Card>
-
-        {/* Combat Stats & Details */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {/* Combat Stats */}
-          <Card>
-            <CardHeader>
-              <CardTitle>{t.characterProfile.combatStats}</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1">
-                  <p className="text-sm text-muted-foreground">{t.characterProfile.maxHitPoints}</p>
-                  <p className="text-2xl font-bold">{selectedCharacter.max_hit_points || 10}</p>
-                </div>
-                <div className="space-y-1">
-                  <p className="text-sm text-muted-foreground">{t.characterProfile.currentHitPoints}</p>
-                  <p className="text-2xl font-bold">{selectedCharacter.current_hit_points || 10}</p>
-                </div>
-                <div className="space-y-1">
-                  <p className="text-sm text-muted-foreground">{t.characterProfile.armorClass}</p>
-                  <p className="text-2xl font-bold">{selectedCharacter.armor_class || 10}</p>
-                </div>
-                <div className="space-y-1">
-                  <p className="text-sm text-muted-foreground">{t.characterProfile.speed}</p>
-                  <p className="text-2xl font-bold">{selectedCharacter.speed || 30} ft</p>
-                </div>
-                <div className="space-y-1 col-span-2">
-                  <p className="text-sm text-muted-foreground">{t.characterProfile.initiativeBonus}</p>
-                  <p className="text-2xl font-bold">
-                    {(selectedCharacter.initiative_bonus || 0) >= 0 ? "+" : ""}
-                    {selectedCharacter.initiative_bonus || 0}
-                  </p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Character Details */}
-          <Card>
-            <CardHeader>
-              <CardTitle>{t.characterProfile.characterDetails}</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {selectedCharacter.background && (
-                <div className="space-y-1">
-                  <p className="text-sm font-medium text-muted-foreground">{t.characterProfile.background}</p>
-                  <p>{selectedCharacter.background}</p>
-                </div>
-              )}
-              <div className="space-y-1">
-                <p className="text-sm font-medium text-muted-foreground">{t.characterProfile.experiencePoints}</p>
-                <p className="text-xl font-bold">{selectedCharacter.experience_points || 0} XP</p>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Narrative Section */}
-        {(selectedCharacter.physical_description ||
-          selectedCharacter.personality_traits ||
-          selectedCharacter.backstory) && (
-          <Card>
-            <CardHeader>
-              <CardTitle>{t.characterProfile.narrativeTitle}</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {selectedCharacter.physical_description && (
-                <div className="space-y-2">
-                  <h4 className="font-semibold">{t.characterProfile.physicalDescription}</h4>
-                  <p className="text-muted-foreground whitespace-pre-wrap">{selectedCharacter.physical_description}</p>
-                </div>
-              )}
-              {selectedCharacter.personality_traits && (
-                <div className="space-y-2">
-                  <h4 className="font-semibold">{t.characterProfile.personalityTraits}</h4>
-                  <p className="text-muted-foreground whitespace-pre-wrap">{selectedCharacter.personality_traits}</p>
-                </div>
-              )}
-              {selectedCharacter.backstory && (
-                <div className="space-y-2">
-                  <h4 className="font-semibold">{t.characterProfile.backstory}</h4>
-                  <p className="text-muted-foreground whitespace-pre-wrap">{selectedCharacter.backstory}</p>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        )}
       </div>
     )
   }
@@ -537,22 +441,10 @@ export function CharactersUnified({ language }: CharactersUnifiedProps) {
         )}
 
         <Tabs defaultValue="profile" className="w-full">
-          <TabsList className="grid w-full grid-cols-4">
+          <TabsList className="grid w-full grid-cols-1">
             <TabsTrigger value="profile">
               <User className="w-4 h-4 mr-2" />
               {t.characterProfile.tabs.profile}
-            </TabsTrigger>
-            <TabsTrigger value="attributes">
-              <Swords className="w-4 h-4 mr-2" />
-              {t.characterProfile.tabs.attributes}
-            </TabsTrigger>
-            <TabsTrigger value="stats">
-              <Heart className="w-4 h-4 mr-2" />
-              {t.characterProfile.tabs.stats}
-            </TabsTrigger>
-            <TabsTrigger value="narrative">
-              <BookOpen className="w-4 h-4 mr-2" />
-              {t.characterProfile.tabs.narrative}
             </TabsTrigger>
           </TabsList>
 
@@ -652,184 +544,41 @@ export function CharactersUnified({ language }: CharactersUnifiedProps) {
                     }
                   />
                 </div>
-                <Button onClick={handleUpdateProfile} className="w-full">
-                  {t.characterProfile.updateCharacter}
-                </Button>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          {/* Attributes Tab */}
-          <TabsContent value="attributes" className="space-y-4">
-            <Card>
-              <CardHeader>
-                <CardTitle>{t.characterProfile.coreAttributes}</CardTitle>
-                <CardDescription>{t.characterProfile.coreAttributesDesc}</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {["strength", "dexterity", "constitution", "intelligence", "wisdom", "charisma"].map((attr) => {
-                    const value = (selectedCharacter[attr as keyof Character] as number) || 10
-                    const modifier = calculateModifier(value)
-                    return (
-                      <Card key={attr}>
-                        <CardHeader className="pb-3">
-                          <CardTitle className="text-lg">{t.characterProfile.attributes[attr]}</CardTitle>
-                        </CardHeader>
-                        <CardContent className="space-y-2">
-                          <Input
-                            type="number"
-                            min="1"
-                            max="30"
-                            value={value}
-                            onChange={(e) =>
-                              setSelectedCharacter({ ...selectedCharacter, [attr]: Number.parseInt(e.target.value) })
-                            }
-                          />
-                          <div className="text-center">
-                            <span className="text-2xl font-bold">
-                              {modifier >= 0 ? "+" : ""}
-                              {modifier}
-                            </span>
-                            <p className="text-xs text-muted-foreground">{t.characterProfile.modifier}</p>
-                          </div>
-                        </CardContent>
-                      </Card>
-                    )
-                  })}
-                </div>
-                <Button onClick={handleUpdateProfile} className="w-full mt-4">
-                  {t.characterProfile.updateCharacter}
-                </Button>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          {/* Stats Tab */}
-          <TabsContent value="stats" className="space-y-4">
-            <Card>
-              <CardHeader>
-                <CardTitle>{t.characterProfile.combatStats}</CardTitle>
-                <CardDescription>{t.characterProfile.combatStatsDesc}</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="max_hp">{t.characterProfile.maxHitPoints}</Label>
-                    <Input
-                      id="max_hp"
-                      type="number"
-                      min="1"
-                      value={selectedCharacter.max_hit_points || 10}
-                      onChange={(e) =>
-                        setSelectedCharacter({
-                          ...selectedCharacter,
-                          max_hit_points: Number.parseInt(e.target.value),
-                        })
-                      }
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="current_hp">{t.characterProfile.currentHitPoints}</Label>
-                    <Input
-                      id="current_hp"
-                      type="number"
-                      min="0"
-                      max={selectedCharacter.max_hit_points || 10}
-                      value={selectedCharacter.current_hit_points || 10}
-                      onChange={(e) =>
-                        setSelectedCharacter({
-                          ...selectedCharacter,
-                          current_hit_points: Number.parseInt(e.target.value),
-                        })
-                      }
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="ac">{t.characterProfile.armorClass}</Label>
-                    <Input
-                      id="ac"
-                      type="number"
-                      min="1"
-                      value={selectedCharacter.armor_class || 10}
-                      onChange={(e) =>
-                        setSelectedCharacter({ ...selectedCharacter, armor_class: Number.parseInt(e.target.value) })
-                      }
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="speed">{t.characterProfile.speed}</Label>
-                    <Input
-                      id="speed"
-                      type="number"
-                      min="0"
-                      value={selectedCharacter.speed || 30}
-                      onChange={(e) =>
-                        setSelectedCharacter({ ...selectedCharacter, speed: Number.parseInt(e.target.value) })
-                      }
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="initiative">{t.characterProfile.initiativeBonus}</Label>
-                    <Input
-                      id="initiative"
-                      type="number"
-                      value={selectedCharacter.initiative_bonus || 0}
-                      onChange={(e) =>
-                        setSelectedCharacter({
-                          ...selectedCharacter,
-                          initiative_bonus: Number.parseInt(e.target.value),
-                        })
-                      }
-                    />
-                  </div>
-                </div>
-                <Button onClick={handleUpdateProfile} className="w-full">
-                  {t.characterProfile.updateCharacter}
-                </Button>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          {/* Narrative Tab */}
-          <TabsContent value="narrative" className="space-y-4">
-            <Card>
-              <CardHeader>
-                <CardTitle>{t.characterProfile.narrativeInfo}</CardTitle>
-                <CardDescription>{t.characterProfile.narrativeInfoDesc}</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
                 <div className="space-y-2">
-                  <Label htmlFor="physical">{t.characterProfile.physicalDescription}</Label>
-                  <Textarea
-                    id="physical"
-                    rows={3}
-                    value={selectedCharacter.physical_description || ""}
+                  <Label htmlFor="carrying_capacity">Carrying Capacity (lbs)</Label>
+                  <Input
+                    id="carrying_capacity"
+                    type="number"
+                    min="0"
+                    value={selectedCharacter.carrying_capacity || 150}
                     onChange={(e) =>
-                      setSelectedCharacter({ ...selectedCharacter, physical_description: e.target.value })
+                      setSelectedCharacter({ ...selectedCharacter, carrying_capacity: Number.parseInt(e.target.value) })
                     }
-                    placeholder={t.characterProfile.physicalPlaceholder}
+                    placeholder="150"
                   />
+                  <p className="text-xs text-muted-foreground">Maximum weight your character can carry for inventory system</p>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="personality">{t.characterProfile.personalityTraits}</Label>
-                  <Textarea
-                    id="personality"
-                    rows={3}
-                    value={selectedCharacter.personality_traits || ""}
-                    onChange={(e) => setSelectedCharacter({ ...selectedCharacter, personality_traits: e.target.value })}
-                    placeholder={t.characterProfile.personalityPlaceholder}
+                  <Label htmlFor="avatar_url">Avatar URL</Label>
+                  <Input
+                    id="avatar_url"
+                    type="url"
+                    value={selectedCharacter.avatar_url || ""}
+                    onChange={(e) => setSelectedCharacter({ ...selectedCharacter, avatar_url: e.target.value })}
+                    placeholder="https://example.com/avatar.jpg"
                   />
+                  <p className="text-xs text-muted-foreground">URL to your character's avatar image</p>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="backstory">{t.characterProfile.backstory}</Label>
+                  <Label htmlFor="preparation_notes">Preparation Notes</Label>
                   <Textarea
-                    id="backstory"
-                    rows={5}
-                    value={selectedCharacter.backstory || ""}
-                    onChange={(e) => setSelectedCharacter({ ...selectedCharacter, backstory: e.target.value })}
-                    placeholder={t.characterProfile.backstoryPlaceholder}
+                    id="preparation_notes"
+                    rows={4}
+                    value={selectedCharacter.preparation_notes || ""}
+                    onChange={(e) => setSelectedCharacter({ ...selectedCharacter, preparation_notes: e.target.value })}
+                    placeholder="Notes for next adventure... (e.g., 'Buy 3 healing potions')"
                   />
+                  <p className="text-xs text-muted-foreground">Free-form notes for adventure preparation</p>
                 </div>
                 <Button onClick={handleUpdateProfile} className="w-full">
                   {t.characterProfile.updateCharacter}

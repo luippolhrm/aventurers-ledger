@@ -149,7 +149,7 @@ export function DashboardOverview({ language, onNavigate }: DashboardOverviewPro
                   name={char.name}
                   race={char.race || "Unknown"}
                   wealth={char.total_wealth || 0}
-                  onSelect={() => onNavigate("character-profile")}
+                  onSelect={() => onNavigate("characters")}
                 />
               ))}
               <Button

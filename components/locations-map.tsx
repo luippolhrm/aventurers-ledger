@@ -1,14 +1,8 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
-import {
-  Button,
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -16,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea"
 import { createBrowserClient } from "@/lib/supabase/client"
 import { useAuth } from "@/lib/auth-context"
+import { useActiveCharacter } from "@/lib/active-character-context"
 import { type Language, translations } from "@/lib/translations"
 import { CharacterSelector } from "@/components/character-selector"
 import { ShopCatalog } from "@/components/shop-catalog"
@@ -73,6 +68,7 @@ export function LocationsMap({ language }: LocationsMapProps) {
   const t = translations[language]
   const supabase = createBrowserClient()
   const { user } = useAuth()
+  const { activeCharacterId } = useActiveCharacter()
   const { toast } = useToast()
 
   const [campaigns, setCampaigns] = useState<CampaignEntry[]>([])
@@ -104,8 +100,6 @@ export function LocationsMap({ language }: LocationsMapProps) {
     story: "",
   })
   const [editingNpc, setEditingNpc] = useState<ShopNpcRow | null>(null)
-
-  const [selectedCharacterId, setSelectedCharacterId] = useState<string>("")
 
   const activeCampaign = useMemo(
     () => campaigns.find((campaign) => campaign.id === selectedCampaignId),
@@ -160,12 +154,12 @@ export function LocationsMap({ language }: LocationsMapProps) {
     }
 
     const mapped: CampaignEntry[] = (data || [])
-      .map((entry: any) => ({
+      .map((entry: { campaigns?: { id: string; name: string }; role: "game_master" | "player" }) => ({
         id: entry.campaigns?.id,
         name: entry.campaigns?.name,
         role: entry.role,
       }))
-      .filter((entry) => entry.id)
+      .filter((entry: { id?: string }) => entry.id)
 
     setCampaigns(mapped)
     if (!selectedCampaignId && mapped.length > 0) {
@@ -487,11 +481,10 @@ export function LocationsMap({ language }: LocationsMapProps) {
               </div>
 
               <div className="space-y-3">
-                <CharacterSelector language={language} onCharacterSelect={setSelectedCharacterId} />
-                {selectedCharacterId ? (
-                  <ShopCatalog language={language} shopId={selectedShopId} characterId={selectedCharacterId} />
+                {activeCharacterId ? (
+                  <ShopCatalog language={language} shopId={selectedShopId} characterId={activeCharacterId} />
                 ) : (
-                  <p className="text-sm text-muted-foreground">{t.marketplace?.selectCharacter || "Select your character to browse the shop catalog."}</p>
+                  <p className="text-sm text-muted-foreground">{t.characterSelector?.selectCharacter || "Select your character to browse the shop catalog."}</p>
                 )}
               </div>
             </>
@@ -532,7 +525,7 @@ export function LocationsMap({ language }: LocationsMapProps) {
               <Textarea value={locationForm.description} onChange={(event) => setLocationForm({ ...locationForm, description: event.target.value })} />
             </div>
             <Button onClick={handleCreateLocation} className="w-full">
-              {t.campaigns?.create || "Create"}
+              {t.marketplace?.create || "Create"}
             </Button>
           </div>
         </DialogContent>
@@ -573,7 +566,7 @@ export function LocationsMap({ language }: LocationsMapProps) {
               <Textarea value={shopForm.description} onChange={(event) => setShopForm({ ...shopForm, description: event.target.value })} />
             </div>
             <Button onClick={handleCreateShop} className="w-full">
-              {t.campaigns?.create || "Create"}
+              {t.marketplace?.create || "Create"}
             </Button>
           </div>
         </DialogContent>
@@ -591,7 +584,7 @@ export function LocationsMap({ language }: LocationsMapProps) {
               <Input value={npcForm.name} onChange={(event) => setNpcForm({ ...npcForm, name: event.target.value })} />
             </div>
             <div>
-              <Label>{t.marketplace?.npcTitle || "Title"}</Label>
+              <Label>{t.marketplace?.npcTitleField || "Title"}</Label>
               <Input value={npcForm.title} onChange={(event) => setNpcForm({ ...npcForm, title: event.target.value })} />
             </div>
             <div>

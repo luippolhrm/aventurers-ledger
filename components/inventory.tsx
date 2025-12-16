@@ -917,7 +917,7 @@ export function Inventory({ language }: InventoryProps) {
               )}
 
               <div className="space-y-2">
-                <Label htmlFor="description">{t.inventory.description}</Label>
+                <Label htmlFor="description">{t.inventory.descriptionLabel}</Label>
                 <Textarea
                   id="description"
                   value={description}

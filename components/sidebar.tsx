@@ -44,8 +44,8 @@ export function Sidebar({ activeModule, onModuleChange, language, includeProfile
       icon: Package,
     },
     {
-      id: "marketplace",
-      name: t.sidebar.marketplace,
+      id: "map",
+      name: t.sidebar.map,
       icon: Store,
     },
     {

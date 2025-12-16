@@ -11,7 +11,7 @@ import { Finances } from "@/components/finances"
 import { Inventory } from "@/components/inventory"
 import { Campaigns } from "@/components/campaigns"
 import { useLanguage } from "@/lib/language-context"
-import { Marketplace } from "@/components/marketplace"
+import { Map } from "@/components/map"
 
 export function MainLayout() {
   const [activeModule, setActiveModule] = useState("welcome")
@@ -39,7 +39,7 @@ export function MainLayout() {
           {activeModule === "currency-converter" && <CurrencyExchangeCard language={language} />}
           {activeModule === "finances" && <Finances language={language} />}
           {activeModule === "inventory" && <Inventory language={language} />}
-          {activeModule === "marketplace" && <Marketplace language={language} />}
+          {activeModule === "map" && <Map language={language} />}
         </main>
 
         <footer className="py-6 px-4 text-center text-sm text-muted-foreground border-t border-border">

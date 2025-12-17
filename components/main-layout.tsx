@@ -1,6 +1,7 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
+import { useRouter } from "next/navigation"
 import { DashboardOverview } from "@/components/dashboard-overview"
 import { CurrencyExchangeCard } from "@/components/currency-exchange-card"
 import { CharactersUnified } from "@/components/characters-unified"
@@ -15,52 +16,75 @@ import { Map } from "@/components/map"
 
 export function MainLayout() {
   const { language, t } = useLanguage()
+  const router = useRouter()
   
-  // Leer el módulo del query parameter de la URL
-  const getModuleFromUrl = () => {
-    if (typeof window !== "undefined") {
+  // Inicializar con valor fijo para evitar error de hidratación
+  // El query parameter se leerá después de la hidratación en useEffect
+  const [activeModule, setActiveModule] = useState("welcome")
+  
+  // Función para actualizar el módulo y la URL
+  const handleModuleChange = useCallback((module: string) => {
+    setActiveModule(module)
+    // Actualizar la URL para reflejar el cambio
+    // Si es "welcome", remover el query parameter; si no, agregarlo/actualizarlo
+    if (module === "welcome") {
+      router.push("/dashboard")
+    } else {
+      router.push(`/dashboard?module=${module}`)
+    }
+  }, [router])
+  
+  // Leer el módulo del query parameter cuando cambia la URL (navegación)
+  useEffect(() => {
+    // Solo ejecutar en el cliente
+    if (typeof window === "undefined") return
+    
+    const getModuleFromUrl = () => {
       const urlParams = new URLSearchParams(window.location.search)
       return urlParams.get("module") || "welcome"
     }
-    return "welcome"
-  }
-  
-  const [activeModule, setActiveModule] = useState(getModuleFromUrl)
-  
-  // Actualizar el módulo activo cuando cambia la URL
-  useEffect(() => {
-    const checkAndUpdateModule = () => {
-      const moduleFromUrl = getModuleFromUrl()
-      if (moduleFromUrl !== activeModule) {
-        setActiveModule(moduleFromUrl)
-      }
-    }
     
-    // Verificar inmediatamente
-    checkAndUpdateModule()
+    // Verificar inmediatamente después de la hidratación
+    const moduleFromUrl = getModuleFromUrl()
+    setActiveModule(moduleFromUrl)
     
     // Escuchar cambios en la URL del navegador (botón back/forward)
-    const handlePopState = () => checkAndUpdateModule()
+    const handlePopState = () => {
+      const moduleFromUrl = getModuleFromUrl()
+      setActiveModule(moduleFromUrl)
+    }
     window.addEventListener("popstate", handlePopState)
     
     // Verificar periódicamente para capturar cambios programáticos de Next.js
-    // (esto es necesario porque Next.js no siempre dispara eventos cuando usa router.push)
-    const interval = setInterval(checkAndUpdateModule, 200)
+    // (router.push no dispara popstate, así que necesitamos verificar periódicamente)
+    // Solo actualizar si la URL realmente cambió y el módulo es diferente
+    let lastSearch = window.location.search
+    const interval = setInterval(() => {
+      const currentSearch = window.location.search
+      if (currentSearch !== lastSearch) {
+        lastSearch = currentSearch
+        const moduleFromUrl = getModuleFromUrl()
+        setActiveModule((prevModule) => {
+          // Solo actualizar si el módulo de la URL es diferente al actual
+          return moduleFromUrl !== prevModule ? moduleFromUrl : prevModule
+        })
+      }
+    }, 100)
     
     return () => {
       window.removeEventListener("popstate", handlePopState)
       clearInterval(interval)
     }
-  }, [activeModule])
+  }, []) // Sin dependencias - solo se ejecuta una vez al montar
 
   return (
     <div className="min-h-screen flex">
-      <Sidebar activeModule={activeModule} onModuleChange={setActiveModule} language={language} />
+      <Sidebar activeModule={activeModule} onModuleChange={handleModuleChange} language={language} />
 
       <div className="flex-1 flex flex-col">
         <header className="py-6 px-4 md:px-8 text-center border-b border-border relative">
           <div className="absolute top-4 right-4 flex items-center gap-3">
-            <CharacterSelector language={language} onNavigateToCharacters={() => setActiveModule("characters")} />
+            <CharacterSelector language={language} onNavigateToCharacters={() => handleModuleChange("characters")} />
             <UserMenu />
           </div>
 

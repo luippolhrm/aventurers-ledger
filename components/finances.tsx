@@ -124,19 +124,35 @@ export function Finances({ language }: FinancesProps) {
   const loadWallet = async () => {
     if (!activeCharacter) return
 
-    const { data, error } = await supabase.from("wallets").select("*").eq("character_id", activeCharacter.id).single()
+    // El wallet se crea automáticamente mediante trigger al crear el personaje
+    // Si no existe, esperar un poco y reintentar (el trigger puede estar procesando)
+    let retries = 3
+    let data = null
+    let error = null
 
-    if (error && error.code === "PGRST116") {
-      await supabase.from("wallets").insert({
-        character_id: activeCharacter.id,
-        platinum: 0,
-        gold: 0,
-        electrum: 0,
-        silver: 0,
-        copper: 0,
-      })
-      setWallet({ platinum: 0, gold: 0, electrum: 0, silver: 0, copper: 0, total_wealth: 0 })
-    } else if (data) {
+    while (retries > 0) {
+      const result = await supabase.from("wallets").select("*").eq("character_id", activeCharacter.id).maybeSingle()
+      data = result.data
+      error = result.error
+
+      if (data) {
+        // Wallet encontrado, salir del loop
+        break
+      }
+
+      if (error && error.code !== "PGRST116") {
+        // Error diferente a "no encontrado", salir
+        break
+      }
+
+      // Wallet no encontrado, esperar un poco antes de reintentar
+      retries--
+      if (retries > 0) {
+        await new Promise((resolve) => setTimeout(resolve, 500)) // Esperar 500ms
+      }
+    }
+
+    if (data) {
       setWallet({
         platinum: Number(data.platinum),
         gold: Number(data.gold),
@@ -145,6 +161,13 @@ export function Finances({ language }: FinancesProps) {
         copper: Number(data.copper),
         total_wealth: Number(data.total_wealth || 0),
       })
+    } else {
+      // Si después de los reintentos aún no existe, inicializar con valores por defecto
+      // El trigger debería haberlo creado, pero por si acaso
+      setWallet({ platinum: 0, gold: 0, electrum: 0, silver: 0, copper: 0, total_wealth: 0 })
+      if (error && error.code !== "PGRST116") {
+        console.error("[v0] Error loading wallet:", error)
+      }
     }
   }
 

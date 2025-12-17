@@ -55,31 +55,95 @@ export function Locations({ language, campaignId, onSelectLocation }: LocationsP
 
   // Load locations when campaign is selected
   useEffect(() => {
-    if (selectedCampaignId) {
+    if (selectedCampaignId && user) {
       loadLocations()
+    } else {
+      setLocations([])
     }
-  }, [selectedCampaignId])
+  }, [selectedCampaignId, user])
+
+  // Función helper para validar acceso a una campaña
+  const validateCampaignAccess = async (campaignId: string): Promise<boolean> => {
+    if (!user || !campaignId) {
+      return false
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from("campaign_members")
+        .select("role")
+        .eq("campaign_id", campaignId)
+        .eq("user_id", user.id)
+        .maybeSingle()
+
+      if (error) {
+        console.error("[v0] Locations: Error validating campaign access:", error)
+        return false
+      }
+
+      return !!data
+    } catch (err) {
+      console.error("[v0] Locations: Exception validating campaign access:", err)
+      return false
+    }
+  }
 
   const loadCampaigns = async () => {
-    if (!user) return
+    if (!user) {
+      setCampaigns([])
+      return
+    }
 
-    const { data: memberData } = await supabase.from("campaign_members").select("campaign_id").eq("user_id", user.id)
+    try {
+      const { data: memberData, error: memberError } = await supabase
+        .from("campaign_members")
+        .select("campaign_id")
+        .eq("user_id", user.id)
 
-    if (memberData && memberData.length > 0) {
-      const campaignIds = memberData.map((m) => m.campaign_id)
-      const { data: campaignsData } = await supabase.from("campaigns").select("id, name").in("id", campaignIds)
-
-      if (campaignsData) {
-        setCampaigns(campaignsData)
-        if (campaignsData.length > 0 && !selectedCampaignId) {
-          setSelectedCampaignId(campaignsData[0].id)
-        }
+      if (memberError) {
+        console.error("[v0] Locations: Error loading campaign members:", memberError)
+        return
       }
+
+      if (memberData && memberData.length > 0) {
+        const campaignIds = memberData.map((m) => m.campaign_id)
+        const { data: campaignsData, error: campaignsError } = await supabase
+          .from("campaigns")
+          .select("id, name")
+          .in("id", campaignIds)
+
+        if (campaignsError) {
+          console.error("[v0] Locations: Error loading campaigns:", campaignsError)
+          return
+        }
+
+        if (campaignsData) {
+          setCampaigns(campaignsData)
+          if (campaignsData.length > 0 && !selectedCampaignId) {
+            setSelectedCampaignId(campaignsData[0].id)
+          }
+        }
+      } else {
+        setCampaigns([])
+      }
+    } catch (err) {
+      console.error("[v0] Locations: Exception loading campaigns:", err)
     }
   }
 
   const loadLocations = async () => {
-    if (!selectedCampaignId) return
+    if (!selectedCampaignId || !user) {
+      setLocations([])
+      return
+    }
+
+    // Validar acceso antes de cargar
+    const hasAccess = await validateCampaignAccess(selectedCampaignId)
+    if (!hasAccess) {
+      console.error("[v0] Locations: Cannot load locations - no access to campaign:", selectedCampaignId)
+      setLocations([])
+      return
+    }
 
     const { data, error } = await supabase
       .from("locations")
@@ -87,9 +151,13 @@ export function Locations({ language, campaignId, onSelectLocation }: LocationsP
       .eq("campaign_id", selectedCampaignId)
       .order("created_at", { ascending: false })
 
-    if (!error && data) {
-      setLocations(data)
+    if (error) {
+      console.error("[v0] Locations: Error loading locations:", error)
+      setLocations([])
+      return
     }
+
+    setLocations(data || [])
   }
 
   const handleCreateLocation = async () => {
@@ -138,7 +206,20 @@ export function Locations({ language, campaignId, onSelectLocation }: LocationsP
         {!campaignId && campaigns.length > 0 && (
           <div className="space-y-2">
             <Label>{t.campaigns?.selectCampaign || "Select Campaign"}</Label>
-            <Select value={selectedCampaignId} onValueChange={setSelectedCampaignId}>
+            <Select
+              value={selectedCampaignId}
+              onValueChange={async (value) => {
+                // Validar acceso antes de cambiar la campaña seleccionada
+                if (value && user) {
+                  const hasAccess = await validateCampaignAccess(value)
+                  if (!hasAccess) {
+                    console.error("[v0] Locations: User does not have access to campaign:", value)
+                    return
+                  }
+                }
+                setSelectedCampaignId(value)
+              }}
+            >
               <SelectTrigger>
                 <SelectValue placeholder={t.campaigns?.selectCampaign || "Select a campaign"} />
               </SelectTrigger>

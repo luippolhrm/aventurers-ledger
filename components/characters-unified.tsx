@@ -249,19 +249,8 @@ export function CharactersUnified({ language }: CharactersUnifiedProps) {
 
         if (error) throw error
 
-        const { error: walletError } = await supabase.from("wallets").insert({
-          character_id: data.id,
-          platinum: 0,
-          gold: 0,
-          electrum: 0,
-          silver: 0,
-          copper: 0,
-          total_wealth: 0,
-        })
-
-        if (walletError && !walletError.message.includes("duplicate")) {
-          console.error("[v0] Error creating wallet:", walletError)
-        }
+        // El wallet se crea automáticamente mediante el trigger en la base de datos
+        // No es necesario crearlo manualmente aquí
 
         setMessage({ type: "success", text: t.character.success })
 

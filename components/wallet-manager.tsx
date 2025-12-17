@@ -51,35 +51,40 @@ export function WalletManager({ language }: WalletManagerProps) {
 
     setIsLoading(true)
     try {
-      const { data, error } = await supabase
-        .from("wallets")
-        .select("*")
-        .eq("character_id", activeCharacter.id)
-        .maybeSingle()
+      // El wallet se crea automáticamente mediante trigger al crear el personaje
+      // Si no existe, esperar un poco y reintentar (el trigger puede estar procesando)
+      let retries = 3
+      let data = null
+      let error = null
 
-      if (error) {
-        throw error
+      while (retries > 0) {
+        const result = await supabase
+          .from("wallets")
+          .select("*")
+          .eq("character_id", activeCharacter.id)
+          .maybeSingle()
+        
+        data = result.data
+        error = result.error
+
+        if (data) {
+          // Wallet encontrado, salir del loop
+          break
+        }
+
+        if (error && error.code !== "PGRST116") {
+          // Error diferente a "no encontrado", salir
+          break
+        }
+
+        // Wallet no encontrado, esperar un poco antes de reintentar
+        retries--
+        if (retries > 0) {
+          await new Promise((resolve) => setTimeout(resolve, 500)) // Esperar 500ms
+        }
       }
 
-      if (!data) {
-        // Wallet doesn't exist, create it
-        const { data: newWallet, error: insertError } = await supabase
-          .from("wallets")
-          .insert({
-            character_id: activeCharacter.id,
-            platinum: 0,
-            gold: 0,
-            electrum: 0,
-            silver: 0,
-            copper: 0,
-          })
-          .select()
-          .single()
-
-        if (insertError) throw insertError
-        setWallet({ PP: 0, GP: 0, EP: 0, SP: 0, CP: 0 })
-        setTotalWealth(0)
-      } else {
+      if (data) {
         setWallet({
           PP: data.platinum,
           GP: data.gold,
@@ -88,6 +93,14 @@ export function WalletManager({ language }: WalletManagerProps) {
           CP: data.copper,
         })
         setTotalWealth(Number.parseFloat(data.total_wealth) || 0)
+      } else {
+        // Si después de los reintentos aún no existe, inicializar con valores por defecto
+        // El trigger debería haberlo creado, pero por si acaso
+        setWallet({ PP: 0, GP: 0, EP: 0, SP: 0, CP: 0 })
+        setTotalWealth(0)
+        if (error && error.code !== "PGRST116") {
+          throw error
+        }
       }
     } catch (error) {
       console.error("Error loading wallet:", error)

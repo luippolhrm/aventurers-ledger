@@ -376,19 +376,59 @@ export function Campaigns({ language }: CampaignsProps) {
     setSelectedCampaign(campaignForView)
 
     try {
-      // Load members
-      const { data, error } = await supabase
-        .from("campaign_members")
-        .select("id, user_id, character_id, role, joined_at")
-        .eq("campaign_id", realCampaignId)
+      // Load members using RPC function to avoid RLS recursion
+      // This function returns all members if user is GM or member of the campaign
+      console.log("[v0] handleViewCampaign: Loading members for campaign:", realCampaignId)
+      
+      let data: any[] | null = null
+      let error: any = null
+      
+      // Try RPC function first
+      const rpcResult = await supabase
+        .rpc("get_campaign_members", { campaign_uuid: realCampaignId })
+      
+      data = rpcResult.data
+      error = rpcResult.error
+      
+      // If RPC fails, fallback to direct query (will only show own membership due to RLS)
+      if (error) {
+        console.warn("[v0] handleViewCampaign: RPC function failed, trying direct query:", error)
+        console.warn("[v0] handleViewCampaign: Error details:", JSON.stringify(error, null, 2))
+        
+        // Fallback: try direct query (limited by RLS)
+        const directResult = await supabase
+          .from("campaign_members")
+          .select("id, user_id, character_id, role, joined_at")
+          .eq("campaign_id", realCampaignId)
+        
+        if (!directResult.error) {
+          console.log("[v0] handleViewCampaign: Using direct query fallback (limited visibility)")
+          data = directResult.data
+          error = null
+        } else {
+          console.error("[v0] handleViewCampaign: Both RPC and direct query failed")
+          throw directResult.error || error
+        }
+      }
 
-      if (error) throw error
+      if (error) {
+        console.error("[v0] handleViewCampaign: Error loading members:", error)
+        console.error("[v0] handleViewCampaign: Error code:", error.code)
+        console.error("[v0] handleViewCampaign: Error message:", error.message)
+        console.error("[v0] handleViewCampaign: Error details:", error.details)
+        console.error("[v0] handleViewCampaign: Error hint:", error.hint)
+        throw error
+      }
 
-      let membersWithEmails = data
+      console.log("[v0] handleViewCampaign: Members loaded:", data?.length || 0, data)
+
+      let membersWithEmails = data || []
       if (data && data.length > 0) {
         // Obtener información de perfiles y personajes
         const userIds = [...new Set(data.map((m) => m.user_id))]
         const characterIds = data.map((m) => m.character_id).filter((id): id is string => id !== null)
+
+        console.log("[v0] handleViewCampaign: Loading profiles for", userIds.length, "users and", characterIds.length, "characters")
 
         const [profilesResult, charactersResult] = await Promise.all([
           supabase
@@ -402,6 +442,13 @@ export function Campaigns({ language }: CampaignsProps) {
                 .in("id", characterIds)
             : Promise.resolve({ data: [], error: null }),
         ])
+
+        if (profilesResult.error) {
+          console.warn("[v0] handleViewCampaign: Error loading profiles:", profilesResult.error)
+        }
+        if (charactersResult.error) {
+          console.warn("[v0] handleViewCampaign: Error loading characters:", charactersResult.error)
+        }
 
         membersWithEmails = data.map((member) => {
           const profile = profilesResult.data?.find((p) => p.id === member.user_id)
@@ -429,13 +476,22 @@ export function Campaigns({ language }: CampaignsProps) {
             user_display_name: profile?.display_name || null,
           }
         })
+
+        console.log("[v0] handleViewCampaign: Processed members:", membersWithEmails.length, membersWithEmails.map(m => ({
+          role: m.role,
+          display: m.user_email,
+          character: m.character_name,
+          user: m.user_display_name
+        })))
+      } else {
+        console.log("[v0] handleViewCampaign: No members found for campaign")
       }
 
       setMembers(membersWithEmails)
       setIsViewDialogOpen(true)
     } catch (err: any) {
       console.error("[v0] Error loading members:", err)
-      setError(err.message)
+      setError(err.message || t.campaigns.errorLoadingMembers || "Failed to load campaign members")
     }
   }
 

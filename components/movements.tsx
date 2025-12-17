@@ -178,19 +178,7 @@ export function Movements({ language }: MovementsProps) {
       const supabase = createBrowserClient()
       const convertedAmount = calculateConversion()
 
-      const newFromBalance = currentBalance - amountNum
-      const newToBalance = wallet[toCurrencyKey] + convertedAmount
-
-      const { error: walletError } = await supabase
-        .from("wallets")
-        .update({
-          [fromCurrencyKey]: newFromBalance,
-          [toCurrencyKey]: newToBalance,
-        })
-        .eq("character_id", activeCharacter.id)
-
-      if (walletError) throw walletError
-
+      // Insert movement - the trigger will automatically update the wallet balance
       const { error: movementError } = await supabase.from("movements").insert({
         character_id: activeCharacter.id,
         from_currency: fromCurrency,

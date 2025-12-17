@@ -16,18 +16,67 @@ DECLARE
   v_cp DECIMAL(10, 2) := 0;
   v_total_wealth DECIMAL(10, 2);
 BEGIN
-  -- Start with zero and sum all movements for this character
+  -- Calculate balance for each currency from all movements
+  -- For each currency:
+  --   - Add: sum amount_from where movement_type = 'add' and from_currency = currency
+  --   - Remove: subtract amount_from where movement_type = 'remove' and from_currency = currency
+  --   - Conversion: subtract amount_from where movement_type = 'conversion' and from_currency = currency
+  --                 AND add amount_to where movement_type = 'conversion' and to_currency = currency
   SELECT 
-    COALESCE(SUM(CASE WHEN from_currency = 'PP' AND movement_type = 'add' THEN amount_from 
-                      WHEN from_currency = 'PP' AND movement_type = 'remove' THEN -amount_from ELSE 0 END), 0),
-    COALESCE(SUM(CASE WHEN from_currency = 'GP' AND movement_type = 'add' THEN amount_from 
-                      WHEN from_currency = 'GP' AND movement_type = 'remove' THEN -amount_from ELSE 0 END), 0),
-    COALESCE(SUM(CASE WHEN from_currency = 'EP' AND movement_type = 'add' THEN amount_from 
-                      WHEN from_currency = 'EP' AND movement_type = 'remove' THEN -amount_from ELSE 0 END), 0),
-    COALESCE(SUM(CASE WHEN from_currency = 'SP' AND movement_type = 'add' THEN amount_from 
-                      WHEN from_currency = 'SP' AND movement_type = 'remove' THEN -amount_from ELSE 0 END), 0),
-    COALESCE(SUM(CASE WHEN from_currency = 'CP' AND movement_type = 'add' THEN amount_from 
-                      WHEN from_currency = 'CP' AND movement_type = 'remove' THEN -amount_from ELSE 0 END), 0)
+    COALESCE(SUM(CASE 
+      WHEN from_currency = 'PP' AND movement_type = 'add' THEN amount_from
+      WHEN from_currency = 'PP' AND movement_type = 'remove' THEN -amount_from
+      WHEN from_currency = 'PP' AND movement_type = 'conversion' THEN -amount_from
+      ELSE 0 
+    END), 0) + 
+    COALESCE(SUM(CASE 
+      WHEN to_currency = 'PP' AND movement_type = 'conversion' THEN amount_to
+      ELSE 0 
+    END), 0),
+    
+    COALESCE(SUM(CASE 
+      WHEN from_currency = 'GP' AND movement_type = 'add' THEN amount_from
+      WHEN from_currency = 'GP' AND movement_type = 'remove' THEN -amount_from
+      WHEN from_currency = 'GP' AND movement_type = 'conversion' THEN -amount_from
+      ELSE 0 
+    END), 0) + 
+    COALESCE(SUM(CASE 
+      WHEN to_currency = 'GP' AND movement_type = 'conversion' THEN amount_to
+      ELSE 0 
+    END), 0),
+    
+    COALESCE(SUM(CASE 
+      WHEN from_currency = 'EP' AND movement_type = 'add' THEN amount_from
+      WHEN from_currency = 'EP' AND movement_type = 'remove' THEN -amount_from
+      WHEN from_currency = 'EP' AND movement_type = 'conversion' THEN -amount_from
+      ELSE 0 
+    END), 0) + 
+    COALESCE(SUM(CASE 
+      WHEN to_currency = 'EP' AND movement_type = 'conversion' THEN amount_to
+      ELSE 0 
+    END), 0),
+    
+    COALESCE(SUM(CASE 
+      WHEN from_currency = 'SP' AND movement_type = 'add' THEN amount_from
+      WHEN from_currency = 'SP' AND movement_type = 'remove' THEN -amount_from
+      WHEN from_currency = 'SP' AND movement_type = 'conversion' THEN -amount_from
+      ELSE 0 
+    END), 0) + 
+    COALESCE(SUM(CASE 
+      WHEN to_currency = 'SP' AND movement_type = 'conversion' THEN amount_to
+      ELSE 0 
+    END), 0),
+    
+    COALESCE(SUM(CASE 
+      WHEN from_currency = 'CP' AND movement_type = 'add' THEN amount_from
+      WHEN from_currency = 'CP' AND movement_type = 'remove' THEN -amount_from
+      WHEN from_currency = 'CP' AND movement_type = 'conversion' THEN -amount_from
+      ELSE 0 
+    END), 0) + 
+    COALESCE(SUM(CASE 
+      WHEN to_currency = 'CP' AND movement_type = 'conversion' THEN amount_to
+      ELSE 0 
+    END), 0)
   INTO v_pp, v_gp, v_ep, v_sp, v_cp
   FROM movements
   WHERE character_id = p_character_id;

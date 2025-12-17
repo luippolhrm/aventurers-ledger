@@ -322,20 +322,8 @@ export function Finances({ language }: FinancesProps) {
 
     const convertedAmount = calculateConversion()
 
-    const { error: walletError } = await supabase
-      .from("wallets")
-      .update({
-        [fromKey]: wallet[fromKey] - amount,
-        [toKey]: wallet[toKey] + convertedAmount,
-      })
-      .eq("character_id", activeCharacter.id)
-
-    if (walletError) {
-      setMessage({ type: "error", text: t.wallet.error })
-      return
-    }
-
-    await supabase.from("movements").insert({
+    // Insert movement - the trigger will automatically update the wallet balance
+    const { error: movementError } = await supabase.from("movements").insert({
       character_id: activeCharacter.id,
       from_currency: transFromCurrency,
       to_currency: transToCurrency,
@@ -343,6 +331,11 @@ export function Finances({ language }: FinancesProps) {
       amount_to: convertedAmount,
       movement_type: "conversion",
     })
+
+    if (movementError) {
+      setMessage({ type: "error", text: t.wallet.error })
+      return
+    }
 
     setMessage({ type: "success", text: t.movements.success })
     setTransAmount("")

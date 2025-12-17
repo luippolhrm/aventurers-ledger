@@ -378,8 +378,6 @@ export function Campaigns({ language }: CampaignsProps) {
     try {
       // Load members using RPC function to avoid RLS recursion
       // This function returns all members if user is GM or member of the campaign
-      console.log("[v0] handleViewCampaign: Loading members for campaign:", realCampaignId)
-      
       let data: any[] | null = null
       let error: any = null
       
@@ -392,13 +390,6 @@ export function Campaigns({ language }: CampaignsProps) {
       
       // If RPC fails, check the error type
       if (error) {
-        console.error("[v0] handleViewCampaign: RPC function failed")
-        console.error("[v0] handleViewCampaign: Error code:", error.code)
-        console.error("[v0] handleViewCampaign: Error message:", error.message)
-        console.error("[v0] handleViewCampaign: Error details:", error.details)
-        console.error("[v0] handleViewCampaign: Error hint:", error.hint)
-        console.error("[v0] handleViewCampaign: Full error:", JSON.stringify(error, null, 2))
-        
         // If function doesn't exist (42883) or permission denied (42501), show helpful error
         if (error.code === "42883" || error.message?.includes("does not exist")) {
           setError("La función get_campaign_members no existe. Por favor ejecuta el script SQL 054 en Supabase.")
@@ -411,67 +402,72 @@ export function Campaigns({ language }: CampaignsProps) {
         }
         
         // For other errors, try fallback but warn user
-        console.warn("[v0] handleViewCampaign: Attempting fallback to direct query (limited visibility)")
         const directResult = await supabase
           .from("campaign_members")
           .select("id, user_id, character_id, role, joined_at")
           .eq("campaign_id", realCampaignId)
         
         if (!directResult.error && directResult.data) {
-          console.warn("[v0] handleViewCampaign: Using direct query fallback - ONLY showing own membership due to RLS")
-          console.warn("[v0] handleViewCampaign: This is a temporary fallback. Please ensure RPC function is working.")
           // Show warning to user that they're seeing limited data
           setError("Advertencia: Solo puedes ver tu propia membresía. La función RPC no está disponible. Por favor ejecuta el script SQL 054.")
           data = directResult.data
           error = null
         } else {
-          console.error("[v0] handleViewCampaign: Both RPC and direct query failed")
           throw directResult.error || error
         }
-      } else {
-        console.log("[v0] handleViewCampaign: RPC function succeeded, loaded", data?.length || 0, "members")
       }
 
       if (error) {
-        console.error("[v0] handleViewCampaign: Final error:", error)
         throw error
       }
 
-      console.log("[v0] handleViewCampaign: Members loaded:", data?.length || 0, data)
-
       // Ensure we have data array
       if (!data) {
-        console.warn("[v0] handleViewCampaign: No data returned, initializing empty array")
         data = []
       }
 
       let membersWithEmails = data
       if (data.length > 0) {
         // Obtener información de perfiles y personajes
-        const userIds = [...new Set(data.map((m) => m.user_id))]
+        const userIds = [...new Set(data.map((m) => m.user_id).filter((id): id is string => id !== null))]
         const characterIds = data.map((m) => m.character_id).filter((id): id is string => id !== null)
 
-        console.log("[v0] handleViewCampaign: Loading profiles for", userIds.length, "users and", characterIds.length, "characters")
+        // Load profiles and characters
+        // Use RPC function for characters to bypass RLS (users can't see other users' characters)
+        const profilesPromise = userIds.length > 0
+          ? supabase
+              .from("profiles")
+              .select("id, display_name")
+              .in("id", userIds)
+          : Promise.resolve({ data: [], error: null })
+
+        // Try RPC function first for characters
+        let charactersPromise: Promise<any>
+        if (characterIds.length > 0) {
+          charactersPromise = supabase
+            .rpc("get_campaign_character_names", {
+              campaign_uuid: realCampaignId,
+              character_ids: characterIds
+            })
+            .then((result) => {
+              // If RPC fails, fallback to direct query (will be limited by RLS)
+              if (result.error) {
+                // Fallback: try direct query (limited by RLS - will only show own characters)
+                return supabase
+                  .from("characters")
+                  .select("id, name")
+                  .in("id", characterIds)
+              }
+              return result
+            })
+        } else {
+          charactersPromise = Promise.resolve({ data: [], error: null })
+        }
 
         const [profilesResult, charactersResult] = await Promise.all([
-          supabase
-            .from("profiles")
-            .select("id, display_name")
-            .in("id", userIds),
-          characterIds.length > 0
-            ? supabase
-                .from("characters")
-                .select("id, name")
-                .in("id", characterIds)
-            : Promise.resolve({ data: [], error: null }),
+          profilesPromise,
+          charactersPromise
         ])
-
-        if (profilesResult.error) {
-          console.warn("[v0] handleViewCampaign: Error loading profiles:", profilesResult.error)
-        }
-        if (charactersResult.error) {
-          console.warn("[v0] handleViewCampaign: Error loading characters:", charactersResult.error)
-        }
 
         membersWithEmails = data.map((member) => {
           const profile = profilesResult.data?.find((p) => p.id === member.user_id)
@@ -479,35 +475,29 @@ export function Campaigns({ language }: CampaignsProps) {
             ? charactersResult.data?.find((c) => c.id === member.character_id)
             : null
 
+          // Guardar los valores para usar en el renderizado
+          const characterName = character?.name || null
+          const playerName = profile?.display_name || null
+
           // Para GM: mostrar solo el nombre del usuario (el GM es el usuario, no un personaje)
-          // Para Player: mostrar el nombre del personaje (si tiene character_id) o el nombre del usuario si no tiene
+          // Para Player: el formato completo se aplicará en el renderizado
           let displayName: string
           if (member.role === "game_master") {
             // GM: solo nombre del usuario
-            displayName = profile?.display_name || member.user_id
+            displayName = playerName || member.user_id
           } else {
-            // Player: mostrar nombre del personaje si existe, sino el nombre del usuario
-            displayName = character
-              ? character.name
-              : profile?.display_name || member.user_id
+            // Player: el formato completo se aplicará en el renderizado
+            // Por ahora solo guardamos el nombre del personaje o del usuario como fallback
+            displayName = characterName || playerName || member.user_id
           }
 
           return {
             ...member,
-            user_email: displayName,
-            character_name: character?.name || null,
-            user_display_name: profile?.display_name || null,
+            user_email: displayName, // Fallback para compatibilidad
+            character_name: characterName,
+            user_display_name: playerName,
           }
         })
-
-        console.log("[v0] handleViewCampaign: Processed members:", membersWithEmails.length, membersWithEmails.map(m => ({
-          role: m.role,
-          display: m.user_email,
-          character: m.character_name,
-          user: m.user_display_name
-        })))
-      } else {
-        console.log("[v0] handleViewCampaign: No members found for campaign")
       }
 
       setMembers(membersWithEmails)
@@ -917,20 +907,26 @@ export function Campaigns({ language }: CampaignsProps) {
                       // Formatear el nombre según el rol
                       let displayText: string
                       if (member.role === "game_master") {
-                        // GM: solo nombre del usuario
+                        // GM: solo nombre del usuario (el GM es el usuario, no un personaje)
                         displayText = member.user_display_name || member.user_email || member.user_id
                       } else {
-                        // Player: mostrar nombre del personaje y nombre del jugador
+                        // Player: SIEMPRE mostrar "nombre del personaje (nombre del jugador)"
+                        // Si no hay personaje, mostrar solo el nombre del jugador
                         const characterName = member.character_name
                         const playerName = member.user_display_name
                         
+                        // Prioridad: characterName (playerName) > characterName > playerName > fallback
                         if (characterName && playerName) {
+                          // Formato deseado: "Nombre del Personaje (Nombre del Jugador)"
                           displayText = `${characterName} (${playerName})`
                         } else if (characterName) {
+                          // Solo hay nombre de personaje, sin nombre de jugador
                           displayText = characterName
                         } else if (playerName) {
+                          // Solo hay nombre de jugador, sin personaje (caso raro pero posible)
                           displayText = playerName
                         } else {
+                          // Fallback: usar user_email o user_id
                           displayText = member.user_email || member.user_id
                         }
                       }

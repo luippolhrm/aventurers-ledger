@@ -39,13 +39,90 @@ CREATE POLICY "campaign_members_select_own"
 -- Then returns all members without RLS restrictions
 -- ============================================================================
 
-CREATE OR REPLACE FUNCTION public.get_campaign_members(campaign_uuid UUID)
-RETURNS TABLE (
+-- Drop function first if it exists (to avoid dependency issues)
+DROP FUNCTION IF EXISTS public.get_campaign_members(UUID);
+
+-- Create a custom type for the return value to avoid ambiguity
+-- Using a custom type instead of RETURNS TABLE avoids column name conflicts
+DROP TYPE IF EXISTS public.campaign_member_result CASCADE;
+CREATE TYPE public.campaign_member_result AS (
   id UUID,
   user_id UUID,
   character_id UUID,
   role TEXT,
   joined_at TIMESTAMPTZ
+);
+
+CREATE OR REPLACE FUNCTION public.get_campaign_members(campaign_uuid UUID)
+RETURNS SETOF public.campaign_member_result AS $$
+DECLARE
+  current_user_id UUID;
+  is_gm BOOLEAN;
+  is_member BOOLEAN;
+BEGIN
+  current_user_id := auth.uid();
+  
+  -- Verify user is authenticated
+  IF current_user_id IS NULL THEN
+    RAISE EXCEPTION 'User must be authenticated';
+  END IF;
+  
+  -- Check if user is GM of the campaign
+  SELECT EXISTS (
+    SELECT 1 FROM public.campaigns c
+    WHERE c.id = campaign_uuid
+    AND c.game_master_id = current_user_id
+  ) INTO is_gm;
+  
+  -- Check if user is a member of the campaign
+  -- Note: This query bypasses RLS because the function has SECURITY DEFINER
+  SELECT EXISTS (
+    SELECT 1 FROM public.campaign_members cm_check
+    WHERE cm_check.campaign_id = campaign_uuid
+    AND cm_check.user_id = current_user_id
+  ) INTO is_member;
+  
+  -- Only return members if user is GM or member
+  IF NOT (is_gm OR is_member) THEN
+    RAISE EXCEPTION 'User is not authorized to view members of this campaign';
+  END IF;
+  
+  -- Return all members (bypassing RLS due to SECURITY DEFINER)
+  -- Using custom type avoids column name conflicts with RETURNS TABLE
+  RETURN QUERY
+  SELECT 
+    cm.id,
+    cm.user_id,
+    cm.character_id,
+    cm.role,
+    cm.joined_at
+  FROM public.campaign_members cm
+  WHERE cm.campaign_id = campaign_uuid
+  ORDER BY 
+    CASE WHEN cm.role = 'game_master' THEN 0 ELSE 1 END,
+    cm.joined_at;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Grant execute permission to authenticated users only
+-- This allows any authenticated user to call the function
+-- (the function itself will verify authorization - user must be GM or member)
+GRANT EXECUTE ON FUNCTION public.get_campaign_members(UUID) TO authenticated;
+
+-- ============================================================================
+-- SECURITY DEFINER FUNCTION: Get character names for campaign members
+-- ============================================================================
+-- This function allows users to see character names of other members
+-- in campaigns where they participate, bypassing RLS restrictions
+-- ============================================================================
+
+CREATE OR REPLACE FUNCTION public.get_campaign_character_names(
+  campaign_uuid UUID,
+  character_ids UUID[]
+)
+RETURNS TABLE (
+  id UUID,
+  name TEXT
 ) AS $$
 DECLARE
   current_user_id UUID;
@@ -60,7 +137,6 @@ BEGIN
   END IF;
   
   -- Check if user is GM of the campaign
-  -- Use explicit table alias to avoid ambiguity
   SELECT EXISTS (
     SELECT 1 FROM public.campaigns c
     WHERE c.id = campaign_uuid
@@ -68,40 +144,29 @@ BEGIN
   ) INTO is_gm;
   
   -- Check if user is a member of the campaign
-  -- Note: This query bypasses RLS because the function has SECURITY DEFINER
-  -- Use explicit table alias to avoid ambiguity
   SELECT EXISTS (
     SELECT 1 FROM public.campaign_members cm_check
     WHERE cm_check.campaign_id = campaign_uuid
     AND cm_check.user_id = current_user_id
   ) INTO is_member;
   
-  -- Only return members if user is GM or member
+  -- Only return character names if user is GM or member
   IF NOT (is_gm OR is_member) THEN
-    RAISE EXCEPTION 'User is not authorized to view members of this campaign';
+    RAISE EXCEPTION 'User is not authorized to view characters of this campaign';
   END IF;
   
-  -- Return all members (bypassing RLS due to SECURITY DEFINER)
-  -- Use explicit table alias to avoid ambiguity with RETURN TABLE columns
+  -- Return character names (bypassing RLS due to SECURITY DEFINER)
   RETURN QUERY
   SELECT 
-    cm.id AS id,
-    cm.user_id AS user_id,
-    cm.character_id AS character_id,
-    cm.role AS role,
-    cm.joined_at AS joined_at
-  FROM public.campaign_members cm
-  WHERE cm.campaign_id = campaign_uuid
-  ORDER BY 
-    CASE WHEN cm.role = 'game_master' THEN 0 ELSE 1 END,
-    cm.joined_at;
+    ch.id,
+    ch.name
+  FROM public.characters ch
+  WHERE ch.id = ANY(character_ids);
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- Grant execute permission to authenticated users only
--- This allows any authenticated user to call the function
--- (the function itself will verify authorization - user must be GM or member)
-GRANT EXECUTE ON FUNCTION public.get_campaign_members(UUID) TO authenticated;
+-- Grant execute permission to authenticated users
+GRANT EXECUTE ON FUNCTION public.get_campaign_character_names(UUID, UUID[]) TO authenticated;
 
 -- Ensure INSERT and DELETE policies exist (keep existing ones if they work)
 -- If they don't exist, create minimal ones

@@ -8,26 +8,22 @@ import { type Language, translations } from "@/lib/translations"
 import { createBrowserClient } from "@/lib/supabase/client"
 import { useAuth } from "@/lib/auth-context"
 import { useActiveCharacter } from "@/lib/active-character-context"
-import { Sword, Crown, Users, ArrowRight } from "lucide-react"
-import { AdventurerCard } from "./adventurer-card"
+import { Sword, Crown, Users, ArrowRight, Coins } from "lucide-react"
+import { getCharacterAvatar } from "@/lib/character-utils"
+import Image from "next/image"
 
 interface DashboardOverviewProps {
   language: Language
   onNavigate: (module: string) => void
 }
 
-interface CharacterFromDB {
-  id: string
-  name: string
-  race: string | null
-  archived: boolean | null
-}
-
-interface CharacterWithWealth {
-  id: string
-  name: string
-  race: string
-  total_wealth: number | null
+interface WalletData {
+  platinum: number
+  gold: number
+  electrum: number
+  silver: number
+  copper: number
+  total_wealth: number
 }
 
 interface Campaign {
@@ -41,13 +37,14 @@ interface Campaign {
   is_gm?: boolean
   is_player?: boolean
   member_count?: number
+  gm_name?: string // Nombre del Game Master
 }
 
 export function DashboardOverview({ language, onNavigate }: DashboardOverviewProps) {
   const t = translations[language]
   const { user } = useAuth()
   const { activeCharacterId, activeCharacter } = useActiveCharacter()
-  const [charactersWithWealth, setCharactersWithWealth] = useState<CharacterWithWealth[]>([])
+  const [wallet, setWallet] = useState<WalletData | null>(null)
   const [campaignsAsGM, setCampaignsAsGM] = useState<Campaign[]>([])
   const [campaignsAsPlayer, setCampaignsAsPlayer] = useState<Campaign[]>([])
   const [loading, setLoading] = useState(true)
@@ -58,7 +55,7 @@ export function DashboardOverview({ language, onNavigate }: DashboardOverviewPro
     } else {
       setLoading(false)
     }
-  }, [user, activeCharacterId])
+  }, [user, activeCharacterId, activeCharacter])
 
   const loadData = async () => {
     if (!user) return
@@ -66,131 +63,123 @@ export function DashboardOverview({ language, onNavigate }: DashboardOverviewPro
     try {
       const supabase = createBrowserClient()
 
-      // Load ONLY active (non-archived) characters
-      const { data: chars, error: charsError } = await supabase
-        .from("characters")
-        .select("id, name, race")
-        .eq("user_id", user.id)
-        .eq("archived", false)
-        .order("name", { ascending: true })
-
-      if (charsError) {
-        console.error("[v0] Dashboard - Error loading characters:", charsError)
-      }
-
-      if (chars && chars.length > 0) {
-        // Load wallets for all characters
-        const characterIds = chars.map((char: CharacterFromDB) => char.id)
-        const { data: wallets, error: walletsError } = await supabase
+      // Load wallet for active character only
+      if (activeCharacterId && activeCharacter) {
+        const { data: walletData, error: walletError } = await supabase
           .from("wallets")
-          .select("character_id, total_wealth")
-          .in("character_id", characterIds)
+          .select("platinum, gold, electrum, silver, copper, total_wealth")
+          .eq("character_id", activeCharacterId)
+          .maybeSingle()
 
-        // Combinar personajes con sus billeteras
-        const charsWithWealth: CharacterWithWealth[] = chars.map((char: CharacterFromDB) => {
-          const wallet = wallets?.find((w: { character_id: string; total_wealth: number | null }) => w.character_id === char.id)
-          return {
-            id: char.id,
-            name: char.name,
-            race: char.race || "Unknown",
-            total_wealth: wallet?.total_wealth ?? 0,
-          }
-        })
-        
-        setCharactersWithWealth(charsWithWealth)
+        if (walletError) {
+          console.error("[v0] Dashboard - Error loading wallet:", walletError)
+          setWallet(null)
+        } else if (walletData) {
+          setWallet({
+            platinum: walletData.platinum || 0,
+            gold: walletData.gold || 0,
+            electrum: walletData.electrum || 0,
+            silver: walletData.silver || 0,
+            copper: walletData.copper || 0,
+            total_wealth: Number.parseFloat(walletData.total_wealth?.toString() || "0") || 0,
+          })
+        } else {
+          // Wallet doesn't exist, set to zero
+          setWallet({
+            platinum: 0,
+            gold: 0,
+            electrum: 0,
+            silver: 0,
+            copper: 0,
+            total_wealth: 0,
+          })
+        }
       } else {
-        // No characters found
-        setCharactersWithWealth([])
+        setWallet(null)
       }
 
-      // Load campaigns where user is member
-      // Si hay personaje activo: mostrar campañas GM (sin filtrar) y campañas Player (filtrar por character_id)
-      let allMemberData: Array<{ campaign_id: string; role: string; character_id: string | null }> = []
+      // Load campaigns where character is player
+      // Esta es una vista de panel de personaje, solo muestra campañas donde el personaje es jugador
+      // NO muestra campañas como GM porque el GM es el usuario, no el personaje
+      let playerMemberData: Array<{ campaign_id: string; role: string; character_id: string | null }> = []
 
       if (activeCharacterId) {
-        // 1. Obtener campañas donde el usuario es GM (sin filtrar por character_id)
-        const { data: gmMembers } = await supabase
-          .from("campaign_members")
-          .select("campaign_id, role, character_id")
-          .eq("user_id", user.id)
-          .eq("role", "game_master")
-
-        // 2. Obtener campañas donde el personaje activo es player
-        const { data: playerMembers } = await supabase
+        // Solo cargar campañas donde el personaje activo es player
+        // NO mostrar campañas como GM porque el GM es el usuario, no el personaje
+        const { data: playerMembers, error: playerError } = await supabase
           .from("campaign_members")
           .select("campaign_id, role, character_id")
           .eq("user_id", user.id)
           .eq("character_id", activeCharacterId)
           .eq("role", "player")
 
-        // Combinar y deduplicar
-        const memberMap = new Map<string, { campaign_id: string; role: string; character_id: string | null }>()
-        
-        // Primero agregar los players
-        ;(playerMembers || []).forEach((m) => {
-          memberMap.set(m.campaign_id, m)
-        })
-        
-        // Luego agregar los GMs
-        ;(gmMembers || []).forEach((m) => {
-          const existing = memberMap.get(m.campaign_id)
-          if (existing) {
-            // Si ya existe como player, mantener ambos (priorizar GM para el rol principal)
-            memberMap.set(m.campaign_id, { ...m, character_id: existing.character_id })
-          } else {
-            memberMap.set(m.campaign_id, m)
-          }
-        })
-
-        allMemberData = Array.from(memberMap.values())
+        if (playerError) {
+          console.error("[v0] Dashboard - Error loading Player campaigns:", playerError)
+        } else {
+          playerMemberData = playerMembers || []
+        }
       } else {
-        // Sin personaje activo: mostrar todas las campañas del usuario
-        const { data } = await supabase
-          .from("campaign_members")
-          .select("campaign_id, role, character_id")
-          .eq("user_id", user.id)
-        allMemberData = data || []
+        // Sin personaje activo: no mostrar campañas en esta vista
+        setCampaignsAsGM([])
+        setCampaignsAsPlayer([])
+        return
       }
 
-      if (allMemberData.length > 0) {
-        const campaignIds = [...new Set(allMemberData.map((m) => m.campaign_id))]
-        const { data: campaignsData } = await supabase
+      // Obtener IDs únicos de las campañas donde el personaje es player
+      const campaignIds = [...new Set(playerMemberData.map((m) => m.campaign_id))]
+
+      if (campaignIds.length > 0) {
+        const { data: campaignsData, error: campaignsError } = await supabase
           .from("campaigns")
           .select("*")
           .in("id", campaignIds)
           .order("created_at", { ascending: false })
 
-        if (campaignsData) {
-          // Asignar el rol correcto basado en el memberData
-          const campaignsWithRole = campaignsData.map((campaign) => {
-            // Buscar si el usuario es GM de esta campaña
-            const gmMember = allMemberData.find(
-              (m) => m.campaign_id === campaign.id && m.role === "game_master"
+        if (campaignsError) {
+          console.error("[v0] Dashboard - Error loading campaigns data:", campaignsError)
+          setCampaignsAsGM([])
+          setCampaignsAsPlayer([])
+        } else if (campaignsData) {
+          // Obtener IDs únicos de los Game Masters
+          const gmIds = [...new Set(campaignsData.map((c: any) => c.game_master_id))]
+
+          // Obtener nombres de los Game Masters desde profiles
+          let gmProfiles: Array<{ id: string; display_name: string | null }> = []
+          if (gmIds.length > 0) {
+            const { data: profilesData, error: profilesError } = await supabase
+              .from("profiles")
+              .select("id, display_name")
+              .in("id", gmIds)
+
+            if (profilesError) {
+              console.warn("[v0] Dashboard - Could not load GM profiles:", profilesError)
+            } else if (profilesData) {
+              gmProfiles = profilesData
+            }
+          }
+
+          // Solo agregar campañas como Player (no hay GM en esta vista)
+          const playerCampaigns: Campaign[] = campaignsData.map((campaign: Campaign & { id: string }) => {
+            const playerMember = playerMemberData.find(
+              (m) => m.campaign_id === campaign.id && m.character_id === activeCharacterId
             )
-            
-            // Buscar si el personaje activo es player de esta campaña
-            const playerMember = activeCharacterId
-              ? allMemberData.find(
-                  (m) =>
-                    m.campaign_id === campaign.id &&
-                    m.role === "player" &&
-                    m.character_id === activeCharacterId
-                )
-              : allMemberData.find(
-                  (m) => m.campaign_id === campaign.id && m.role === "player"
-                )
+
+            // Buscar el nombre del GM
+            const gmProfile = gmProfiles.find((p) => p.id === campaign.game_master_id)
+            const gmName = gmProfile?.display_name || "Game Master"
 
             return {
               ...campaign,
-              role: gmMember ? "game_master" : playerMember?.role || "player",
+              role: "player",
+              is_gm: false,
+              is_player: true,
               character_id: playerMember?.character_id || null,
-              is_gm: !!gmMember,
-              is_player: !!playerMember,
+              gm_name: gmName,
             }
           })
 
-          setCampaignsAsGM(campaignsWithRole.filter((c) => c.is_gm))
-          setCampaignsAsPlayer(campaignsWithRole.filter((c) => c.is_player && !c.is_gm))
+          setCampaignsAsGM([]) // No hay campañas como GM en esta vista
+          setCampaignsAsPlayer(playerCampaigns)
         } else {
           setCampaignsAsGM([])
           setCampaignsAsPlayer([])
@@ -229,7 +218,7 @@ export function DashboardOverview({ language, onNavigate }: DashboardOverviewPro
         <p className="text-muted-foreground">{t.welcome.quickStats}</p>
       </div>
 
-      {/* Characters Section */}
+      {/* Active Character Section */}
       <Card className="border-2">
         <CardHeader>
           <div className="flex items-center gap-3">
@@ -239,135 +228,181 @@ export function DashboardOverview({ language, onNavigate }: DashboardOverviewPro
             <div>
               <CardTitle>{t.sidebar.character}</CardTitle>
               <CardDescription>
-                {charactersWithWealth.length} character{charactersWithWealth.length !== 1 ? "s" : ""}
+                {activeCharacter ? activeCharacter.name : t.characterSelector.selectCharacter}
               </CardDescription>
             </div>
           </div>
         </CardHeader>
         <CardContent>
-          {charactersWithWealth.length > 0 ? (
-            <div className="space-y-3">
-              {charactersWithWealth.map((char) => (
-                <AdventurerCard
-                  key={char.id}
-                  name={char.name}
-                  race={char.race || "Unknown"}
-                  wealth={char.total_wealth || 0}
-                  onSelect={() => onNavigate("characters")}
-                />
-              ))}
-              <Button
-                variant="outline"
-                className="w-full gap-2 mt-4 bg-transparent"
-                onClick={() => onNavigate("characters")}
-              >
-                {t.character.manageAdventurers}
-                <ArrowRight className="w-4 h-4" />
-              </Button>
+          {activeCharacter ? (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              {/* Character Info */}
+              <div className="p-4 bg-gradient-to-br from-amber-50 to-yellow-50 dark:from-amber-950 dark:to-yellow-900 border-2 border-amber-200 dark:border-amber-800 rounded-lg">
+                <div className="space-y-3">
+                  <div className="flex items-center gap-4">
+                    <div className="relative w-20 h-20 rounded-full overflow-hidden bg-muted border-2 border-amber-300 dark:border-amber-700 flex-shrink-0">
+                      <Image
+                        src={getCharacterAvatar(activeCharacter)}
+                        alt={activeCharacter.name}
+                        fill
+                        className="object-cover"
+                        unoptimized
+                      />
+                    </div>
+                    <div className="flex-1">
+                      <h3 className="text-2xl font-bold text-amber-900 dark:text-amber-50">{activeCharacter.name}</h3>
+                      <div className="flex items-center gap-2 mt-1 flex-wrap">
+                        <p className="text-sm text-amber-700 dark:text-amber-200 font-serif italic">
+                          {activeCharacter.race || "Unknown"}
+                        </p>
+                        {activeCharacter.level && (
+                          <>
+                            <span className="text-amber-600 dark:text-amber-400">•</span>
+                            <p className="text-sm text-amber-700 dark:text-amber-200">Level {activeCharacter.level}</p>
+                          </>
+                        )}
+                        {activeCharacter.class && (
+                          <>
+                            <span className="text-amber-600 dark:text-amber-400">•</span>
+                            <p className="text-sm text-amber-700 dark:text-amber-200">{activeCharacter.class}</p>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Wallet Info */}
+              {wallet && (
+                <div className="p-4 bg-muted rounded-lg border">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Coins className="w-4 h-4 text-amber-600" />
+                    <h3 className="font-semibold">{t.wallet?.title || "Wallet"}</h3>
+                  </div>
+                  <div className="grid grid-cols-5 gap-2">
+                    <div className="text-center">
+                      <p className="text-xl font-bold">{wallet.platinum}</p>
+                      <p className="text-xs text-muted-foreground">PP</p>
+                    </div>
+                    <div className="text-center">
+                      <p className="text-xl font-bold">{wallet.gold}</p>
+                      <p className="text-xs text-muted-foreground">GP</p>
+                    </div>
+                    <div className="text-center">
+                      <p className="text-xl font-bold">{wallet.electrum}</p>
+                      <p className="text-xs text-muted-foreground">EP</p>
+                    </div>
+                    <div className="text-center">
+                      <p className="text-xl font-bold">{wallet.silver}</p>
+                      <p className="text-xs text-muted-foreground">SP</p>
+                    </div>
+                    <div className="text-center">
+                      <p className="text-xl font-bold">{wallet.copper}</p>
+                      <p className="text-xs text-muted-foreground">CP</p>
+                    </div>
+                  </div>
+                  <div className="mt-3 pt-3 border-t text-center">
+                    <p className="text-sm text-muted-foreground">{t.wallet?.totalWealth || "Total Wealth"}</p>
+                    <p className="text-lg font-bold">{wallet.total_wealth.toFixed(2)} GP</p>
+                  </div>
+                </div>
+              )}
+
+              {/* Button - Full width on mobile, but in grid on desktop */}
+              <div className="lg:col-span-2">
+                <Button
+                  variant="outline"
+                  className="w-full gap-2 bg-transparent"
+                  onClick={() => onNavigate("characters")}
+                >
+                  {t.character.manageAdventurers || "Manage Characters"}
+                  <ArrowRight className="w-4 h-4" />
+                </Button>
+              </div>
             </div>
           ) : (
             <Alert>
-              <AlertDescription>{t.welcome.noCharacter}</AlertDescription>
+              <AlertDescription className="flex flex-col gap-3">
+                <span>{t.welcome.noCharacter || "No active character selected"}</span>
+                <Button
+                  variant="outline"
+                  className="w-full gap-2"
+                  onClick={() => onNavigate("characters")}
+                >
+                  {t.characterSelector.manageCharacters || "Select a Character"}
+                  <ArrowRight className="w-4 h-4" />
+                </Button>
+              </AlertDescription>
             </Alert>
           )}
         </CardContent>
       </Card>
 
-      {/* Campaigns Section */}
-      <Card className="border-2">
-        <CardHeader>
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-full bg-accent/10 flex items-center justify-center">
-              <Users className="w-6 h-6 text-accent" />
+      {/* Campaigns Section - Solo como Player (vista de panel de personaje) */}
+      {activeCharacter && (
+        <Card className="border-2">
+          <CardHeader>
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-full bg-accent/10 flex items-center justify-center">
+                <Users className="w-6 h-6 text-accent" />
+              </div>
+              <div>
+                <CardTitle>{t.sidebar.campaigns}</CardTitle>
+                <CardDescription>
+                  {campaignsAsPlayer.length} campaign{campaignsAsPlayer.length !== 1 ? "s" : ""} as Player
+                </CardDescription>
+              </div>
             </div>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            {/* Campaigns as Player */}
             <div>
-              <CardTitle>{t.sidebar.campaigns}</CardTitle>
-              <CardDescription>
-                {campaignsAsGM.length + campaignsAsPlayer.length} campaign
-                {campaignsAsGM.length + campaignsAsPlayer.length !== 1 ? "s" : ""}
-              </CardDescription>
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          {/* Campaigns as DM */}
-          <div>
-            <div className="flex items-center gap-2 mb-3">
-              <Crown className="w-4 h-4 text-amber-600" />
-              <h3 className="font-semibold">{t.campaigns.campaignsAsGM || "Campaigns as Game Master"}</h3>
-            </div>
-            {campaignsAsGM.length > 0 ? (
-              <div className="space-y-2">
-                {campaignsAsGM.map((campaign) => (
-                  <div
-                    key={campaign.id}
-                    className="p-4 bg-muted rounded-lg border hover:border-primary transition-colors cursor-pointer"
-                    onClick={() => onNavigate("campaigns")}
-                  >
-                    <div className="flex items-start justify-between">
-                      <div>
-                        <p className="font-medium">{campaign.name}</p>
-                        {campaign.description && (
-                          <p className="text-sm text-muted-foreground mt-1 line-clamp-2">{campaign.description}</p>
-                        )}
-                      </div>
-                      <span className="text-xs font-medium bg-amber-100 dark:bg-amber-900 text-amber-800 dark:text-amber-100 px-2 py-1 rounded">
-                        DM
-                      </span>
-                    </div>
-                  </div>
-                ))}
+              <div className="flex items-center gap-2 mb-3">
+                <Sword className="w-4 h-4 text-blue-600" />
+                <h3 className="font-semibold">{"Campaigns as Player"}</h3>
               </div>
-            ) : (
-              <p className="text-sm text-muted-foreground p-3 bg-muted rounded-lg">
-                {t.campaigns.noCampaigns || "No campaigns as Game Master"}
-              </p>
-            )}
-          </div>
-
-          {/* Campaigns as Player */}
-          <div>
-            <div className="flex items-center gap-2 mb-3">
-              <Sword className="w-4 h-4 text-blue-600" />
-              <h3 className="font-semibold">{t.campaigns.campaignsAsPlayer || "Campaigns as Player"}</h3>
-            </div>
-            {campaignsAsPlayer.length > 0 ? (
-              <div className="space-y-2">
-                {campaignsAsPlayer.map((campaign) => (
-                  <div
-                    key={campaign.id}
-                    className="p-4 bg-muted rounded-lg border hover:border-primary transition-colors cursor-pointer"
-                    onClick={() => onNavigate("campaigns")}
-                  >
-                    <div className="flex items-start justify-between">
-                      <div>
-                        <p className="font-medium">{campaign.name}</p>
-                        {campaign.description && (
-                          <p className="text-sm text-muted-foreground mt-1 line-clamp-2">{campaign.description}</p>
-                        )}
+              {campaignsAsPlayer.length > 0 ? (
+                <div className="space-y-2">
+                  {campaignsAsPlayer.map((campaign) => (
+                    <div
+                      key={campaign.id}
+                      className="p-4 bg-muted rounded-lg border hover:border-primary transition-colors cursor-pointer"
+                      onClick={() => onNavigate("campaigns")}
+                    >
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <p className="font-medium">{campaign.name}</p>
+                          {campaign.description && (
+                            <p className="text-sm text-muted-foreground mt-1 line-clamp-2">{campaign.description}</p>
+                          )}
+                          {campaign.gm_name && (
+                            <p className="text-xs text-muted-foreground mt-2">
+                              <span className="font-medium">GM:</span> {campaign.gm_name}
+                            </p>
+                          )}
+                        </div>
+                        <span className="text-xs font-medium bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-100 px-2 py-1 rounded ml-2">
+                          Player
+                        </span>
                       </div>
-                      <span className="text-xs font-medium bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-100 px-2 py-1 rounded">
-                        Player{campaign.character_id && activeCharacter?.id === campaign.character_id && activeCharacter?.name
-                          ? ` (${activeCharacter.name})`
-                          : ""}
-                      </span>
                     </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className="text-sm text-muted-foreground p-3 bg-muted rounded-lg">
-                {t.campaigns.noCampaigns || "No campaigns as Player"}
-              </p>
-            )}
-          </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground p-3 bg-muted rounded-lg">
+                  {"No campaigns as Player"}
+                </p>
+              )}
+            </div>
 
-          <Button variant="outline" className="w-full gap-2 bg-transparent" onClick={() => onNavigate("campaigns")}>
-            {t.sidebar.campaigns}
-            <ArrowRight className="w-4 h-4" />
-          </Button>
-        </CardContent>
-      </Card>
+            <Button variant="outline" className="w-full gap-2 bg-transparent" onClick={() => onNavigate("campaigns")}>
+              {t.sidebar.campaigns}
+              <ArrowRight className="w-4 h-4" />
+            </Button>
+          </CardContent>
+        </Card>
+      )}
     </div>
   )
 }

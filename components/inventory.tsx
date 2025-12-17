@@ -14,6 +14,8 @@ import { useActiveCharacter } from "@/lib/active-character-context"
 import { createBrowserClient } from "@/lib/supabase/client"
 import { Package, Plus, Shield, TrendingUp, Trash2, Edit, User, Archive, ArrowRight } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
+import { getCharacterAvatar } from "@/lib/character-utils"
+import Image from "next/image"
 
 // Slots corporales (items individuales, NO contenedores)
 const BODY_SLOTS = [
@@ -963,12 +965,24 @@ export function Inventory({ language }: InventoryProps) {
 
               {/* Center Column - Character visual representation */}
               <div className="flex flex-col items-center justify-center space-y-4">
-                <div className="w-48 h-48 bg-muted rounded-full flex items-center justify-center">
-                  <User className="w-32 h-32 text-muted-foreground/30" />
-                </div>
+                {activeCharacter ? (
+                  <div className="relative w-48 h-48 rounded-full overflow-hidden bg-muted border-2 border-primary/20 flex-shrink-0">
+                    <Image
+                      src={getCharacterAvatar(activeCharacter)}
+                      alt={activeCharacter.name}
+                      fill
+                      className="object-cover"
+                      unoptimized
+                    />
+                  </div>
+                ) : (
+                  <div className="w-48 h-48 bg-muted rounded-full flex items-center justify-center">
+                    <User className="w-32 h-32 text-muted-foreground/30" />
+                  </div>
+                )}
                 <div className="text-center">
-                  <p className="font-semibold">{activeCharacter?.name}</p>
-                  <p className="text-sm text-muted-foreground">{activeCharacter?.race}</p>
+                  <p className="font-semibold">{activeCharacter?.name || "No character selected"}</p>
+                  <p className="text-sm text-muted-foreground">{activeCharacter?.race || ""}</p>
                 </div>
               </div>
 

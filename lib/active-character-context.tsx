@@ -10,6 +10,8 @@ interface Character {
   race: string
   level?: number
   class?: string
+  avatar_url?: string | null
+  gender?: string | null
 }
 
 interface ActiveCharacterContextType {

@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 180" fill="currentColor">
+  <!-- Silueta masculina con símbolo de género -->
+  <!-- Cabeza -->
+  <circle cx="60" cy="25" r="18" />
+  <!-- Hombros -->
+  <path d="M 35 50 Q 30 50 30 55 L 30 75 Q 30 80 35 80 L 40 80 L 40 55 Q 40 50 35 50 Z" />
+  <path d="M 85 50 Q 90 50 90 55 L 90 75 Q 90 80 85 80 L 80 80 L 80 55 Q 80 50 85 50 Z" />
+  <!-- Torso -->
+  <rect x="40" y="50" width="40" height="80" rx="8" />
+  <!-- Cuello -->
+  <rect x="52" y="43" width="16" height="8" rx="2" />
+  <!-- Símbolo masculino (♂) centrado en el torso -->
+  <text x="60" y="100" font-family="Arial, sans-serif" font-size="32" font-weight="bold" text-anchor="middle" dominant-baseline="middle" fill="currentColor">♂</text>
+</svg>

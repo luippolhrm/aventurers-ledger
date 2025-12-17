@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 180" fill="currentColor">
+  <!-- Silueta femenina con símbolo de género -->
+  <!-- Cabeza -->
+  <circle cx="60" cy="25" r="18" />
+  <!-- Hombros (más estrechos) -->
+  <path d="M 38 50 Q 33 50 33 55 L 33 70 Q 33 75 38 75 L 42 75 L 42 55 Q 42 50 38 50 Z" />
+  <path d="M 82 50 Q 87 50 87 55 L 87 70 Q 87 75 82 75 L 78 75 L 78 55 Q 78 50 82 50 Z" />
+  <!-- Torso (forma más curvada) -->
+  <path d="M 42 50 Q 60 60 78 50 L 78 130 Q 60 125 42 130 Z" />
+  <!-- Cuello -->
+  <rect x="52" y="43" width="16" height="8" rx="2" />
+  <!-- Símbolo femenino (♀) centrado en el torso -->
+  <text x="60" y="100" font-family="Arial, sans-serif" font-size="32" font-weight="bold" text-anchor="middle" dominant-baseline="middle" fill="currentColor">♀</text>
+</svg>

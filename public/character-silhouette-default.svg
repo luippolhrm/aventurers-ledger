@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 180" fill="currentColor">
+  <!-- Silueta genérica/neutral -->
+  <!-- Cabeza -->
+  <circle cx="60" cy="25" r="18" />
+  <!-- Hombros -->
+  <path d="M 36 50 Q 31 50 31 55 L 31 75 Q 31 80 36 80 L 41 80 L 41 55 Q 41 50 36 50 Z" />
+  <path d="M 84 50 Q 89 50 89 55 L 89 75 Q 89 80 84 80 L 79 80 L 79 55 Q 79 50 84 50 Z" />
+  <!-- Torso (forma neutral) -->
+  <rect x="41" y="50" width="38" height="80" rx="8" />
+  <!-- Cuello -->
+  <rect x="52" y="43" width="16" height="8" rx="2" />
+  <!-- Símbolo de persona genérica (○) o sin símbolo específico -->
+  <circle cx="60" cy="100" r="12" stroke="currentColor" stroke-width="2" fill="none" />
+</svg>

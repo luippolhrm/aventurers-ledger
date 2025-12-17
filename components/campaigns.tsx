@@ -1086,209 +1086,81 @@ export function Campaigns({ language }: CampaignsProps) {
         </Alert>
       )}
 
-      <Tabs defaultValue="all" className="w-full">
-        <TabsList>
-          <TabsTrigger value="all" className="relative">
-            {t.campaigns.allCampaigns || "All Campaigns"}
-            {pendingInvitations.length > 0 && (
-              <Badge variant="destructive" className="ml-2 h-5 w-5 rounded-full p-0 flex items-center justify-center text-xs">
-                {pendingInvitations.length}
-              </Badge>
-            )}
-          </TabsTrigger>
-          <TabsTrigger value="gm">{t.campaigns.asGM || "As Game Master"}</TabsTrigger>
-          <TabsTrigger value="player">{t.campaigns.asPlayer || "As Player"}</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="all" className="mt-6">
-          {/* Campaign List - Todas las campañas disponibles */}
-          <div className="space-y-4">
-            {/* Buzón de Invitaciones - Destacado */}
-            {pendingInvitations.length > 0 && (
-              <Card className="border-2 border-primary bg-primary/5">
-                <CardHeader>
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <Mail className="h-5 w-5 text-primary" />
-                      <CardTitle className="text-lg">
-                        {t.campaigns.pendingInvitations || "Pending Invitations"}
-                      </CardTitle>
-                      <Badge variant="default" className="ml-2">
-                        {pendingInvitations.length}
-                      </Badge>
-                    </div>
-                  </div>
-                  <CardDescription>
-                    {t.campaigns.invitationsDescription || "You have pending campaign invitations"}
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-3">
-                    {pendingInvitations.map((invitation) => (
-                      <Card key={invitation.id} className="border border-primary/20">
-                        <CardContent className="pt-4">
-                          <div className="flex items-start justify-between">
-                            <div className="flex-1">
-                              <div className="flex items-center gap-2 mb-2">
-                                <CardTitle className="text-base">{invitation.campaign_name}</CardTitle>
-                                <Badge variant="outline">
-                                  <Mail className="h-3 w-3 mr-1" />
-                                  {t.campaigns.invitation || "Invitation"}
-                                </Badge>
-                              </div>
-                              <CardDescription className="mb-2">
-                                {t.campaigns.invitedBy || "Invited by"}: <strong>{invitation.inviter_name}</strong>
-                              </CardDescription>
-                              {invitation.message && (
-                                <p className="text-sm text-muted-foreground mb-2 italic">"{invitation.message}"</p>
-                              )}
-                              <p className="text-xs text-muted-foreground">
-                                {new Date(invitation.created_at).toLocaleDateString()}
-                              </p>
-                            </div>
-                            <div className="flex gap-2 ml-4">
-                              <Button
-                                variant="default"
-                                size="sm"
-                                onClick={() => handleAcceptInvitation(invitation.id)}
-                              >
-                                <Check className="h-4 w-4 mr-2" />
-                                {t.campaigns.accept || "Accept"}
-                              </Button>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => handleRejectInvitation(invitation.id)}
-                              >
-                                <X className="h-4 w-4 mr-2" />
-                                {t.campaigns.reject || "Reject"}
-                              </Button>
-                            </div>
-                          </div>
-                        </CardContent>
-                      </Card>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-            )}
-
-            {/* Campañas donde el usuario es miembro */}
-            {campaigns.length > 0 && (
-              <div className="space-y-4">
-                <h3 className="text-lg font-semibold">{t.campaigns.myCampaigns || "My Campaigns"}</h3>
-                {campaigns.map((campaign) => (
-                  <Card
-                    key={campaign.id}
-                    className="cursor-pointer hover:bg-accent"
-                    onClick={() => handleViewCampaign(campaign)}
-                  >
-                    <CardHeader>
-                      <div className="flex items-start justify-between">
-                        <div>
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <CardTitle>{campaign.name}</CardTitle>
-                            {campaign.is_gm && (
-                              <Badge variant="default">
-                                <span className="flex items-center gap-1">
-                                  <Crown className="h-3 w-3" /> GM
-                                </span>
-                              </Badge>
-                            )}
-                            {campaign.is_player && (
-                              <Badge variant="secondary">
-                                <span>
-                                  {t.campaigns.player || "Player"}
-                                  {campaign.character_id && activeCharacter?.id === campaign.character_id && activeCharacter?.name
-                                    ? ` (${activeCharacter.name})`
-                                    : ""}
-                                </span>
-                              </Badge>
-                            )}
-                          </div>
-                          <CardDescription>{campaign.description}</CardDescription>
-                        </div>
-                        {campaign.is_gm && (
-                          <Button
-                            variant="destructive"
-                            size="sm"
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              handleDeleteCampaign(campaign.id)
-                            }}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        )}
-                      </div>
-                    </CardHeader>
-                  </Card>
-                ))}
+      {/* Buzón de Invitaciones - Destacado fuera de las pestañas */}
+      {pendingInvitations.length > 0 && (
+        <Card className="border-2 border-primary bg-primary/5 mb-6">
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Mail className="h-5 w-5 text-primary" />
+                <CardTitle className="text-lg">
+                  {t.campaigns.pendingInvitations || "Pending Invitations"}
+                </CardTitle>
+                <Badge variant="default" className="ml-2">
+                  {pendingInvitations.length}
+                </Badge>
               </div>
-            )}
-
-            {/* Campañas disponibles para unirse */}
-            {allAvailableCampaigns.length > 0 && (
-              <div className="space-y-4 mt-6">
-                <h3 className="text-lg font-semibold">{t.campaigns.availableCampaigns || "Available Campaigns"}</h3>
-                {allAvailableCampaigns.map((campaign) => (
-                  <Card
-                    key={campaign.id}
-                    className="cursor-pointer hover:bg-accent border-2 border-primary/20"
-                    onClick={() => {
-                      setInviteCode(campaign.invite_code || "")
-                      setIsJoinDialogOpen(true)
-                    }}
-                  >
-                    <CardHeader>
-                      <div className="flex items-start justify-between">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2 mb-2">
-                            <CardTitle>{campaign.name}</CardTitle>
-                            <Badge variant="outline">
-                              <Crown className="h-3 w-3 mr-1" />
-                              {t.campaigns.createdBy || "Created by"}: {campaign.creator_name || "Unknown"}
-                            </Badge>
-                          </div>
-                          <CardDescription className="mb-2">{campaign.description}</CardDescription>
-                          <div className="text-sm text-muted-foreground">
-                            {t.campaigns.inviteCode || "Invite Code"}: <code className="bg-muted px-2 py-1 rounded">{campaign.invite_code}</code>
-                          </div>
+            </div>
+            <CardDescription>
+              {t.campaigns.invitationsDescription || "You have pending campaign invitations"}
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              {pendingInvitations.map((invitation) => (
+                <Card key={invitation.id} className="border border-primary/20">
+                  <CardContent className="pt-4">
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-2">
+                          <CardTitle className="text-base">{invitation.campaign_name}</CardTitle>
+                          <Badge variant="outline">
+                            <Mail className="h-3 w-3 mr-1" />
+                            {t.campaigns.invitation || "Invitation"}
+                          </Badge>
                         </div>
+                        <CardDescription className="mb-2">
+                          {t.campaigns.invitedBy || "Invited by"}: <strong>{invitation.inviter_name}</strong>
+                        </CardDescription>
+                        {invitation.message && (
+                          <p className="text-sm text-muted-foreground mb-2 italic">"{invitation.message}"</p>
+                        )}
+                        <p className="text-xs text-muted-foreground">
+                          {new Date(invitation.created_at).toLocaleDateString()}
+                        </p>
+                      </div>
+                      <div className="flex gap-2 ml-4">
                         <Button
                           variant="default"
                           size="sm"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            setInviteCode(campaign.invite_code || "")
-                            setIsJoinDialogOpen(true)
-                          }}
+                          onClick={() => handleAcceptInvitation(invitation.id)}
                         >
-                          <UserPlus className="h-4 w-4 mr-2" />
-                          {t.campaigns.join || "Join"}
+                          <Check className="h-4 w-4 mr-2" />
+                          {t.campaigns.accept || "Accept"}
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleRejectInvitation(invitation.id)}
+                        >
+                          <X className="h-4 w-4 mr-2" />
+                          {t.campaigns.reject || "Reject"}
                         </Button>
                       </div>
-                    </CardHeader>
-                  </Card>
-                ))}
-              </div>
-            )}
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
-            {/* Estado vacío */}
-            {!loading && campaigns.length === 0 && allAvailableCampaigns.length === 0 && (
-              <Card>
-                <CardContent className="pt-6">
-                  {t.campaigns.noCampaigns || "You are not part of any campaigns yet."}
-                  {allAvailableCampaigns.length === 0 && (
-                    <p className="text-sm text-muted-foreground mt-2">
-                      {t.campaigns.createCharacterFirst || "Create a character first to see available campaigns."}
-                    </p>
-                  )}
-                </CardContent>
-              </Card>
-            )}
-          </div>
-        </TabsContent>
+      <Tabs defaultValue="gm" className="w-full">
+        <TabsList>
+          <TabsTrigger value="gm">{t.campaigns.asGM || "As Game Master"}</TabsTrigger>
+          <TabsTrigger value="player">{t.campaigns.asPlayer || "As Player"}</TabsTrigger>
+        </TabsList>
 
         <TabsContent value="gm" className="mt-6">
           {/* Campaign List */}

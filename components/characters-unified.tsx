@@ -51,6 +51,7 @@ interface Character {
   carrying_capacity?: number
   preparation_notes?: string
   avatar_url?: string
+  gender?: string | null
   created_at: string
   archived: boolean
   user_id?: string
@@ -71,6 +72,7 @@ export function CharactersUnified({ language }: CharactersUnifiedProps) {
   const [race, setRace] = useState("")
   const [characterClass, setCharacterClass] = useState("")
   const [level, setLevel] = useState<number>(1)
+  const [gender, setGender] = useState<string>("")
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null)
   const [saving, setSaving] = useState(false)
   const [wallet, setWallet] = useState<{ platinum: number; gold: number; electrum: number; silver: number; copper: number; total_wealth: number } | null>(null)
@@ -175,6 +177,7 @@ export function CharactersUnified({ language }: CharactersUnifiedProps) {
     setRace("")
     setCharacterClass("")
     setLevel(1)
+    setGender("")
     setMessage(null)
     setIsDialogOpen(true)
   }
@@ -185,6 +188,7 @@ export function CharactersUnified({ language }: CharactersUnifiedProps) {
     setRace(character.race)
     setCharacterClass(character.class || "")
     setLevel(character.level || 1)
+    setGender(character.gender || "")
     setMessage(null)
     setIsDialogOpen(true)
   }
@@ -221,6 +225,7 @@ export function CharactersUnified({ language }: CharactersUnifiedProps) {
             race: race.trim(),
             class: characterClass.trim() || null,
             level: level || null,
+            gender: gender || null,
           })
           .eq("id", editingCharacter.id)
 
@@ -235,6 +240,7 @@ export function CharactersUnified({ language }: CharactersUnifiedProps) {
             race: race.trim(),
             class: characterClass.trim() || null,
             level: level || null,
+            gender: gender || null,
             user_id: userId,
             archived: false,
           })
@@ -415,6 +421,7 @@ export function CharactersUnified({ language }: CharactersUnifiedProps) {
                 <CardDescription className="text-lg mt-2">
                   {selectedCharacter.class && `${selectedCharacter.class} • `}
                   {t.characterProfile.level} {selectedCharacter.level || 1} • {selectedCharacter.race}
+                  {selectedCharacter.gender && ` • ${selectedCharacter.gender === 'male' ? 'Masculino' : selectedCharacter.gender === 'female' ? 'Femenino' : 'Otro'}`}
                   {selectedCharacter.alignment && ` • ${selectedCharacter.alignment}`}
                 </CardDescription>
               </div>
@@ -441,7 +448,13 @@ export function CharactersUnified({ language }: CharactersUnifiedProps) {
             <div className="space-y-1">
               <p className="text-sm font-medium text-muted-foreground">Carrying Capacity</p>
               <p className="text-xl font-bold">{selectedCharacter.carrying_capacity || 150} lbs</p>
-        </div>
+            </div>
+            {selectedCharacter.gender && (
+              <div className="space-y-1">
+                <p className="text-sm font-medium text-muted-foreground">Gender</p>
+                <p>{selectedCharacter.gender === 'male' ? 'Masculino' : selectedCharacter.gender === 'female' ? 'Femenino' : 'Otro'}</p>
+              </div>
+            )}
             {selectedCharacter.preparation_notes && (
               <div className="space-y-1">
                 <p className="text-sm font-medium text-muted-foreground">Preparation Notes</p>
@@ -608,6 +621,23 @@ export function CharactersUnified({ language }: CharactersUnifiedProps) {
                         ))}
                       </SelectContent>
                     </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="gender">Gender</Label>
+                    <Select
+                      value={selectedCharacter.gender || ""}
+                      onValueChange={(value) => setSelectedCharacter({ ...selectedCharacter, gender: value || null })}
+                    >
+                      <SelectTrigger id="gender">
+                        <SelectValue placeholder="Select gender" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="male">Masculino</SelectItem>
+                        <SelectItem value="female">Femenino</SelectItem>
+                        <SelectItem value="other">Otro</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">Used for default avatar selection</p>
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="level">{t.characterProfile.level}</Label>
@@ -904,6 +934,21 @@ export function CharactersUnified({ language }: CharactersUnifiedProps) {
                   <SelectItem value="wizard">{t.character.classes.wizard}</SelectItem>
                 </SelectContent>
               </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="gender">Gender</Label>
+              <Select value={gender} onValueChange={setGender}>
+                <SelectTrigger id="gender">
+                  <SelectValue placeholder="Select gender" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="male">Masculino</SelectItem>
+                  <SelectItem value="female">Femenino</SelectItem>
+                  <SelectItem value="other">Otro</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">Used for default avatar selection</p>
             </div>
 
             <div className="space-y-2">

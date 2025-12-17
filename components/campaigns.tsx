@@ -490,6 +490,35 @@ export function Campaigns({ language }: CampaignsProps) {
     }
   }
 
+  const handleRemoveMember = async (memberId: string, memberName: string) => {
+    if (!selectedCampaign) return
+    
+    if (!confirm(t.campaigns.confirmRemoveMember?.replace("{name}", memberName) || `Are you sure you want to remove ${memberName} from this campaign?`)) return
+
+    try {
+      setError("")
+      setSuccess("")
+
+      const { error } = await supabase
+        .from("campaign_members")
+        .delete()
+        .eq("id", memberId)
+
+      if (error) throw error
+
+      setSuccess(t.campaigns.memberRemoved || "Member removed successfully")
+      
+      // Recargar los miembros de la campaña
+      await handleViewCampaign(selectedCampaign)
+      
+      // Recargar la lista de campañas
+      loadCampaigns()
+    } catch (err: any) {
+      console.error("[v0] Error removing member:", err)
+      setError(err.message || t.campaigns.errorRemovingMember || "Failed to remove member")
+    }
+  }
+
   const isGM = (campaign: Campaign) => campaign.is_gm === true || campaign.role === "game_master"
 
   if (loading) {
@@ -767,9 +796,7 @@ export function Campaigns({ language }: CampaignsProps) {
             <Tabs defaultValue="overview" className="w-full">
               <TabsList className="grid w-full grid-cols-2">
                 <TabsTrigger value="overview">{t.campaigns.overview || "Overview"}</TabsTrigger>
-                {selectedCampaign.is_gm && (
-                  <TabsTrigger value="members">{t.campaigns.members || "Members"}</TabsTrigger>
-                )}
+                <TabsTrigger value="members">{t.campaigns.members || "Members"}</TabsTrigger>
               </TabsList>
 
               <TabsContent value="overview" className="space-y-4">
@@ -799,19 +826,40 @@ export function Campaigns({ language }: CampaignsProps) {
                 </Button>
               </TabsContent>
 
-              {selectedCampaign.role === "game_master" && (
-                <TabsContent value="members" className="space-y-4">
-                  <div className="flex justify-between items-center mb-4">
-                    <h4 className="font-semibold">{t.campaigns.members || "Members"}</h4>
-                  </div>
-                  {members.length === 0 ? (
-                    <p>{t.campaigns.noMembers || "No members in this campaign"}</p>
-                  ) : (
-                    <div className="space-y-2">
-                      {members.map((member) => (
+              <TabsContent value="members" className="space-y-4">
+                <div className="flex justify-between items-center mb-4">
+                  <h4 className="font-semibold">{t.campaigns.members || "Members"}</h4>
+                </div>
+                {members.length === 0 ? (
+                  <p>{t.campaigns.noMembers || "No members in this campaign"}</p>
+                ) : (
+                  <div className="space-y-2">
+                    {members.map((member) => {
+                      // Formatear el nombre según el rol
+                      let displayText: string
+                      if (member.role === "game_master") {
+                        // GM: solo nombre del usuario
+                        displayText = member.user_display_name || member.user_email || member.user_id
+                      } else {
+                        // Player: mostrar nombre del personaje y nombre del jugador
+                        const characterName = member.character_name
+                        const playerName = member.user_display_name
+                        
+                        if (characterName && playerName) {
+                          displayText = `${characterName} (${playerName})`
+                        } else if (characterName) {
+                          displayText = characterName
+                        } else if (playerName) {
+                          displayText = playerName
+                        } else {
+                          displayText = member.user_email || member.user_id
+                        }
+                      }
+
+                      return (
                         <div key={member.id} className="flex items-center justify-between p-2 bg-muted rounded">
                           <div className="flex items-center gap-2">
-                            <span>{member.user_email}</span>
+                            <span>{displayText}</span>
                             <Badge variant={member.role === "game_master" ? "default" : "secondary"}>
                               {member.role === "game_master" ? (
                                 <span className="flex items-center gap-1">
@@ -827,9 +875,12 @@ export function Campaigns({ language }: CampaignsProps) {
                             <Button
                               variant="ghost"
                               size="sm"
-                              onClick={() => {
-                                // TODO: implementar funcionalidad para eliminar miembro
-                                // Por ahora, este botón no hace nada
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                const memberName = member.character_name 
+                                  ? `${member.character_name} (${member.user_display_name || member.user_email || 'this member'})`
+                                  : member.user_email || "this member"
+                                handleRemoveMember(member.id, memberName)
                               }}
                               title={t.campaigns.removeMember || "Remove member"}
                             >
@@ -837,11 +888,11 @@ export function Campaigns({ language }: CampaignsProps) {
                             </Button>
                           )}
                         </div>
-                      ))}
-                    </div>
-                  )}
-                </TabsContent>
-              )}
+                      )
+                    })}
+                  </div>
+                )}
+              </TabsContent>
             </Tabs>
           </DialogContent>
         </Dialog>

@@ -60,18 +60,20 @@ BEGIN
   END IF;
   
   -- Check if user is GM of the campaign
+  -- Use explicit table alias to avoid ambiguity
   SELECT EXISTS (
-    SELECT 1 FROM public.campaigns
-    WHERE id = campaign_uuid
-    AND game_master_id = current_user_id
+    SELECT 1 FROM public.campaigns c
+    WHERE c.id = campaign_uuid
+    AND c.game_master_id = current_user_id
   ) INTO is_gm;
   
   -- Check if user is a member of the campaign
   -- Note: This query bypasses RLS because the function has SECURITY DEFINER
+  -- Use explicit table alias to avoid ambiguity
   SELECT EXISTS (
-    SELECT 1 FROM public.campaign_members
-    WHERE campaign_id = campaign_uuid
-    AND user_id = current_user_id
+    SELECT 1 FROM public.campaign_members cm_check
+    WHERE cm_check.campaign_id = campaign_uuid
+    AND cm_check.user_id = current_user_id
   ) INTO is_member;
   
   -- Only return members if user is GM or member
@@ -80,13 +82,14 @@ BEGIN
   END IF;
   
   -- Return all members (bypassing RLS due to SECURITY DEFINER)
+  -- Use explicit table alias to avoid ambiguity with RETURN TABLE columns
   RETURN QUERY
   SELECT 
-    cm.id,
-    cm.user_id,
-    cm.character_id,
-    cm.role,
-    cm.joined_at
+    cm.id AS id,
+    cm.user_id AS user_id,
+    cm.character_id AS character_id,
+    cm.role AS role,
+    cm.joined_at AS joined_at
   FROM public.campaign_members cm
   WHERE cm.campaign_id = campaign_uuid
   ORDER BY 

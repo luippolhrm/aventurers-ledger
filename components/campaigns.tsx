@@ -9,10 +9,12 @@ import { Textarea } from "@/components/ui/textarea"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { AlertCircle, Copy, Crown, Trash2, UserPlus, LogOut, Mail, Check, X } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { createBrowserClient } from "@/lib/supabase/client"
 import { useAuth } from "@/lib/auth-context"
+import { useActiveCharacter } from "@/lib/active-character-context"
 import { type Language, translations } from "@/lib/translations"
 
 interface Campaign {
@@ -25,15 +27,21 @@ interface Campaign {
   created_at: string
   member_count?: number
   role?: string
+  character_id?: string | null
+  is_gm?: boolean
+  is_player?: boolean
   creator_name?: string // Nombre del creador (GM)
 }
 
 interface CampaignMember {
   id: string
   user_id: string
+  character_id: string | null
   role: string
   joined_at: string
-  user_email?: string
+  user_email?: string // Display name (user name for GM, character name for Player)
+  character_name?: string | null
+  user_display_name?: string | null
 }
 
 interface CampaignInvitation {
@@ -42,6 +50,7 @@ interface CampaignInvitation {
   inviter_id: string
   invitee_id: string | null
   invitee_email: string
+  character_id: string | null
   status: "pending" | "accepted" | "rejected" | "cancelled"
   message: string | null
   created_at: string
@@ -56,6 +65,7 @@ interface CampaignsProps {
 export function Campaigns({ language }: CampaignsProps) {
   const t = translations[language]
   const { user } = useAuth()
+  const { activeCharacterId, activeCharacter } = useActiveCharacter()
   const supabase = createBrowserClient()
 
   const [campaigns, setCampaigns] = useState<Campaign[]>([])
@@ -79,12 +89,27 @@ export function Campaigns({ language }: CampaignsProps) {
   // Invitation states
   const [inviteEmail, setInviteEmail] = useState("")
   const [inviteMessage, setInviteMessage] = useState("")
+  const [inviteType, setInviteType] = useState<"email" | "character">("email")
+  const [selectedInviteCharacterId, setSelectedInviteCharacterId] = useState<string>("")
+  const [availableCharacters, setAvailableCharacters] = useState<Array<{ id: string; name: string; user_id: string }>>([])
+  const [searchResults, setSearchResults] = useState<any[]>([])
+  const [isSearching, setIsSearching] = useState(false)
 
   useEffect(() => {
     loadCampaigns()
     loadAllAvailableCampaigns()
     loadPendingInvitations()
-  }, [])
+  }, [activeCharacterId, user])
+
+  // Auto-hide success message after 5 seconds
+  useEffect(() => {
+    if (success) {
+      const timer = setTimeout(() => {
+        setSuccess("")
+      }, 5000)
+      return () => clearTimeout(timer)
+    }
+  }, [success])
 
   const loadCampaigns = async () => {
     if (!user) return
@@ -92,21 +117,95 @@ export function Campaigns({ language }: CampaignsProps) {
     try {
       setLoading(true)
 
-      // Get campaigns where user is a member
-      const { data: memberData, error: memberError } = await supabase
-        .from("campaign_members")
-        .select("campaign_id, role")
-        .eq("user_id", user.id)
+      let allMemberData: Array<{ campaign_id: string; role: string; character_id: string | null }> = []
 
-      if (memberError) throw memberError
+      if (activeCharacterId) {
+        console.log("[v0] loadCampaigns: Loading for activeCharacterId:", activeCharacterId)
+        
+        // 1. Obtener campañas donde el usuario es GM (sin filtrar por character_id)
+        const { data: gmMembers, error: gmError } = await supabase
+          .from("campaign_members")
+          .select("campaign_id, role, character_id")
+          .eq("user_id", user.id)
+          .eq("role", "game_master")
 
-      const campaignIds = (memberData || []).map((m: { campaign_id: string; role: string }) => m.campaign_id)
+        if (gmError) throw gmError
+        console.log("[v0] loadCampaigns: GM members found:", gmMembers?.length || 0, gmMembers)
 
-      if (campaignIds.length === 0) {
+        // 2. Obtener campañas donde el personaje activo es player
+        // Buscar con character_id específico
+        const { data: playerMembersWithChar, error: playerError } = await supabase
+          .from("campaign_members")
+          .select("campaign_id, role, character_id")
+          .eq("user_id", user.id)
+          .eq("character_id", activeCharacterId)
+          .eq("role", "player")
+
+        if (playerError) {
+          console.error("[v0] loadCampaigns: Error loading player members:", playerError)
+          throw playerError
+        }
+        console.log("[v0] loadCampaigns: Player members found (with character_id):", playerMembersWithChar?.length || 0, playerMembersWithChar)
+
+        // Solo usar playerMembers con character_id asignado
+        // NO incluir registros legacy (character_id = NULL) porque son datos inconsistentes
+        // y asignarlos automáticamente al personaje activo causaría que cualquier personaje
+        // aparezca como player de campañas donde no lo es realmente
+        const playerMembers = [...(playerMembersWithChar || [])]
+
+        console.log("[v0] loadCampaigns: Total player members:", playerMembers.length, playerMembers)
+
+        // Separar los roles: si una campaña tiene ambos roles, crear entradas separadas
+        // Esto permite mostrarlas por separado en las pestañas "Como GM" y "Como Jugador"
+        const allMembers: Array<{ campaign_id: string; role: string; character_id: string | null; is_gm: boolean; is_player: boolean }> = []
+        
+        // Agregar todas las campañas donde el usuario es GM (sin character_id)
+        ;(gmMembers || []).forEach((m) => {
+          allMembers.push({
+            campaign_id: m.campaign_id,
+            role: "game_master",
+            character_id: null, // GM no tiene character_id
+            is_gm: true,
+            is_player: false
+          })
+        })
+        
+        // Agregar todas las campañas donde el personaje activo es player (con character_id)
+        ;(playerMembers || []).forEach((m) => {
+          allMembers.push({
+            campaign_id: m.campaign_id,
+            role: "player",
+            character_id: m.character_id,
+            is_gm: false,
+            is_player: true
+          })
+        })
+
+        allMemberData = allMembers
+        console.log("[v0] loadCampaigns: Separated members (GM and Player as separate entries):", allMemberData.length, allMemberData.map(m => ({
+          campaign_id: m.campaign_id,
+          is_gm: m.is_gm,
+          is_player: m.is_player,
+          character_id: m.character_id
+        })))
+      } else {
+        // Sin personaje activo: mostrar todas las campañas del usuario
+        const { data, error: memberError } = await supabase
+          .from("campaign_members")
+          .select("campaign_id, role, character_id")
+          .eq("user_id", user.id)
+
+        if (memberError) throw memberError
+        allMemberData = data || []
+      }
+
+      if (allMemberData.length === 0) {
         setCampaigns([])
         setLoading(false)
         return
       }
+
+      const campaignIds = [...new Set(allMemberData.map((m) => m.campaign_id))]
 
       // Get campaign details
       const { data: campaignsData, error: campaignsError } = await supabase
@@ -117,11 +216,56 @@ export function Campaigns({ language }: CampaignsProps) {
 
       if (campaignsError) throw campaignsError
 
-      // Attach role to each campaign
-      const campaignsWithRole = campaignsData.map((campaign) => ({
-        ...campaign,
-        role: (memberData || []).find((m: { campaign_id: string; role: string }) => m.campaign_id === campaign.id)?.role,
-      }))
+      // Crear entradas de campaña separadas para cada rol
+      // Si una campaña tiene ambos roles (GM y Player), se crearán DOS entradas separadas
+      const campaignsWithRole: Campaign[] = []
+      
+      // Obtener IDs únicos de campañas
+      const uniqueCampaignIds = [...new Set(allMemberData.map((m) => m.campaign_id))]
+      
+      for (const campaignId of uniqueCampaignIds) {
+        const campaign = campaignsData.find((c) => c.id === campaignId)
+        if (!campaign) continue
+
+        // Buscar todos los miembros de esta campaña (puede haber GM y/o Player)
+        const members = allMemberData.filter((m) => m.campaign_id === campaignId)
+        
+        // Crear una entrada separada para cada rol
+        for (const member of members) {
+          console.log("[v0] loadCampaigns: Creating campaign entry", campaign.name, {
+            role: member.role,
+            is_gm: member.is_gm,
+            is_player: member.is_player,
+            character_id: member.character_id,
+          })
+
+          // Crear una entrada única para esta combinación de campaña + rol
+          // Usar un ID compuesto para evitar duplicados si hay múltiples miembros del mismo tipo
+          campaignsWithRole.push({
+            ...campaign,
+            id: `${campaign.id}_${member.role}_${member.character_id || 'gm'}`, // ID único para cada rol
+            role: member.role,
+            character_id: member.character_id || null,
+            is_gm: member.is_gm,
+            is_player: member.is_player,
+          })
+        }
+      }
+      
+      console.log("[v0] loadCampaigns: Final campaigns with roles (separated):", campaignsWithRole.length, campaignsWithRole.map(c => ({
+        name: c.name,
+        id: c.id,
+        is_gm: c.is_gm,
+        is_player: c.is_player,
+        character_id: c.character_id
+      })))
+
+      console.log("[v0] loadCampaigns: Final campaigns with roles:", campaignsWithRole.map(c => ({
+        name: c.name,
+        is_gm: c.is_gm,
+        is_player: c.is_player,
+        character_id: c.character_id
+      })))
 
       setCampaigns(campaignsWithRole)
     } catch (err: any) {
@@ -216,6 +360,7 @@ export function Campaigns({ language }: CampaignsProps) {
       setError("")
       setSuccess("")
 
+      // El GM no necesita un personaje activo - el GM es el usuario, no un personaje
       const { data, error: createError } = await supabase
         .from("campaigns")
         .insert({
@@ -228,13 +373,15 @@ export function Campaigns({ language }: CampaignsProps) {
 
       if (createError) throw createError
 
+      // GM tiene character_id: null porque el GM es el usuario, no un personaje
       const { error: memberError } = await supabase.from("campaign_members").upsert(
         {
           campaign_id: data.id,
           user_id: user.id,
+          character_id: null, // GM es el usuario, no un personaje
           role: "game_master",
         },
-        { onConflict: "campaign_id,user_id" },
+        { onConflict: "campaign_id,user_id,character_id" },
       )
 
       if (memberError) throw memberError
@@ -257,6 +404,12 @@ export function Campaigns({ language }: CampaignsProps) {
       setError("")
       setSuccess("")
 
+      // Verificar que hay un personaje activo
+      if (!activeCharacterId) {
+        setError(t.campaigns.selectCharacterFirst || "Please select a character first to join the campaign")
+        return
+      }
+
       // Find campaign by invite code
       const { data: campaign, error: findError } = await supabase
         .from("campaigns")
@@ -269,37 +422,40 @@ export function Campaigns({ language }: CampaignsProps) {
         return
       }
 
+      // Verificar si ya es miembro con este personaje
       const { data: existingMember } = await supabase
         .from("campaign_members")
         .select("id, role")
         .eq("campaign_id", campaign.id)
         .eq("user_id", user.id)
-        .eq("role", "player")
+        .eq("character_id", activeCharacterId)
         .maybeSingle()
 
       if (existingMember) {
-        setError(t.campaigns.alreadyMember || "You are already a member of this campaign")
+        setError(t.campaigns.alreadyMember || "This character is already a member of this campaign")
         return
       }
 
       const { error: joinError } = await supabase.from("campaign_members").insert({
         campaign_id: campaign.id,
         user_id: user.id,
+        character_id: activeCharacterId,
         role: "player",
       })
 
       if (joinError) {
         if (joinError.code === "23505") {
-          // Only show error if they're already a player, GMs can be players too
+          // Only show error if they're already a player with this character, GMs can be players too
           const { data: checkMember } = await supabase
             .from("campaign_members")
             .select("role")
             .eq("campaign_id", campaign.id)
             .eq("user_id", user.id)
+            .eq("character_id", activeCharacterId)
             .maybeSingle()
 
           if (checkMember?.role === "player") {
-            setError(t.campaigns.alreadyMember || "You are already a member of this campaign")
+            setError(t.campaigns.alreadyMember || "This character is already a member of this campaign")
           } else {
             setSuccess(t.campaigns.joinedCampaign || "Joined campaign successfully as a player!")
           }
@@ -321,31 +477,65 @@ export function Campaigns({ language }: CampaignsProps) {
   }
 
   const handleViewCampaign = async (campaign: Campaign) => {
-    setSelectedCampaign(campaign)
+    // Extraer el ID real de la campaña (puede tener formato compuesto: campaignId_role_characterId)
+    const realCampaignId = campaign.id.includes('_') ? campaign.id.split('_')[0] : campaign.id
+    const campaignForView = { ...campaign, id: realCampaignId }
+    setSelectedCampaign(campaignForView)
 
     try {
       // Load members
       const { data, error } = await supabase
         .from("campaign_members")
-        .select("id, user_id, role, joined_at")
-        .eq("campaign_id", campaign.id)
+        .select("id, user_id, character_id, role, joined_at")
+        .eq("campaign_id", realCampaignId)
 
       if (error) throw error
 
       let membersWithEmails = data
       if (data && data.length > 0) {
-        const { data: profiles } = await supabase
-          .from("profiles")
-          .select("id, display_name")
-          .in(
-            "id",
-            data.map((m) => m.user_id),
-          )
+        // Obtener información de perfiles y personajes
+        const userIds = [...new Set(data.map((m) => m.user_id))]
+        const characterIds = data.map((m) => m.character_id).filter((id): id is string => id !== null)
 
-        membersWithEmails = data.map((member) => ({
-          ...member,
-          user_email: profiles?.find((p) => p.id === member.user_id)?.display_name || member.user_id,
-        }))
+        const [profilesResult, charactersResult] = await Promise.all([
+          supabase
+            .from("profiles")
+            .select("id, display_name")
+            .in("id", userIds),
+          characterIds.length > 0
+            ? supabase
+                .from("characters")
+                .select("id, name")
+                .in("id", characterIds)
+            : Promise.resolve({ data: [], error: null }),
+        ])
+
+        membersWithEmails = data.map((member) => {
+          const profile = profilesResult.data?.find((p) => p.id === member.user_id)
+          const character = member.character_id
+            ? charactersResult.data?.find((c) => c.id === member.character_id)
+            : null
+
+          // Para GM: mostrar solo el nombre del usuario (el GM es el usuario, no un personaje)
+          // Para Player: mostrar el nombre del personaje (si tiene character_id) o el nombre del usuario si no tiene
+          let displayName: string
+          if (member.role === "game_master") {
+            // GM: solo nombre del usuario
+            displayName = profile?.display_name || member.user_id
+          } else {
+            // Player: mostrar nombre del personaje si existe, sino el nombre del usuario
+            displayName = character
+              ? character.name
+              : profile?.display_name || member.user_id
+          }
+
+          return {
+            ...member,
+            user_email: displayName,
+            character_name: character?.name || null,
+            user_display_name: profile?.display_name || null,
+          }
+        })
       }
 
       setMembers(membersWithEmails)
@@ -359,20 +549,23 @@ export function Campaigns({ language }: CampaignsProps) {
   const handleCopyInviteCode = (code: string) => {
     navigator.clipboard.writeText(code)
     setSuccess(t.campaigns.inviteCodeCopied || "Invite code copied!")
-    setTimeout(() => setSuccess(""), 2000)
+    // El mensaje desaparecerá automáticamente después de 5 segundos (manejado por useEffect)
   }
 
   const handleLeaveCampaign = async (campaignId: string) => {
-    if (!user) return
+    if (!user || !activeCharacterId) return
 
     if (!confirm(t.campaigns.confirmLeave || "Are you sure you want to leave this campaign?")) return
 
     try {
+      // Extraer el ID real de la campaña (puede tener formato compuesto)
+      const realCampaignId = campaignId.includes('_') ? campaignId.split('_')[0] : campaignId
       const { error } = await supabase
         .from("campaign_members")
         .delete()
-        .eq("campaign_id", campaignId)
+        .eq("campaign_id", realCampaignId)
         .eq("user_id", user.id)
+        .eq("character_id", activeCharacterId)
 
       if (error) throw error
 
@@ -389,7 +582,9 @@ export function Campaigns({ language }: CampaignsProps) {
     if (!confirm(t.campaigns.confirmDelete || "Are you sure you want to delete this campaign?")) return
 
     try {
-      const { error } = await supabase.from("campaigns").delete().eq("id", campaignId)
+      // Extraer el ID real de la campaña (puede tener formato compuesto)
+      const realCampaignId = campaignId.includes('_') ? campaignId.split('_')[0] : campaignId
+      const { error } = await supabase.from("campaigns").delete().eq("id", realCampaignId)
 
       if (error) throw error
 
@@ -422,23 +617,40 @@ export function Campaigns({ language }: CampaignsProps) {
       }
 
       // Buscar invitaciones por invitee_id O por invitee_email
+      // Si hay personaje activo, filtrar por character_id (debe coincidir o ser NULL)
       // Usar dos consultas separadas porque .or() puede tener problemas con RLS
-      console.log("[v0] loadPendingInvitations: Searching by invitee_id:", user.id)
-      const { data: dataById, error: errorById } = await supabase
+      console.log("[v0] loadPendingInvitations: Searching by invitee_id:", user.id, "activeCharacterId:", activeCharacterId)
+      
+      let queryById = supabase
         .from("campaign_invitations")
         .select("*")
         .eq("invitee_id", user.id)
         .eq("status", "pending")
 
+      // Si hay personaje activo, filtrar por character_id (debe coincidir o ser NULL)
+      if (activeCharacterId) {
+        queryById = queryById.or(`character_id.eq.${activeCharacterId},character_id.is.null`)
+      }
+
+      const { data: dataById, error: errorById } = await queryById
+
       console.log("[v0] loadPendingInvitations: Search by ID result:", { data: dataById?.length || 0, error: errorById })
 
       console.log("[v0] loadPendingInvitations: Searching by invitee_email:", userEmail)
-      const { data: dataByEmail, error: errorByEmail } = await supabase
+      
+      let queryByEmail = supabase
         .from("campaign_invitations")
         .select("*")
         .eq("invitee_email", userEmail)
         .is("invitee_id", null) // Solo las que no tienen invitee_id (para evitar duplicados)
         .eq("status", "pending")
+
+      // Si hay personaje activo, filtrar por character_id (debe coincidir o ser NULL)
+      if (activeCharacterId) {
+        queryByEmail = queryByEmail.or(`character_id.eq.${activeCharacterId},character_id.is.null`)
+      }
+
+      const { data: dataByEmail, error: errorByEmail } = await queryByEmail
 
       console.log("[v0] loadPendingInvitations: Search by email result:", { data: dataByEmail?.length || 0, error: errorByEmail })
 
@@ -575,57 +787,109 @@ export function Campaigns({ language }: CampaignsProps) {
   }
 
   const handleSendInvitation = async () => {
-    if (!user || !selectedCampaign || !inviteEmail.trim()) return
+    if (!user || !selectedCampaign) return
 
     try {
       setError("")
       setSuccess("")
 
-      const email = inviteEmail.trim().toLowerCase()
-
-      // Validar formato de email básico
-      if (!email.includes("@") || !email.includes(".")) {
-        setError(t.campaigns.invalidEmail || "Invalid email format")
-        return
-      }
-
-      // Buscar usuario por email (no podemos acceder directamente a auth.users desde el cliente)
-      // Por ahora, creamos la invitación solo con email
-      // Si el usuario existe y se registra después, se vinculará automáticamente cuando acepte
       let inviteeId: string | null = null
-      
-      // Intentar buscar si hay un usuario con ese email en la base de datos
-      // Nota: No podemos buscar directamente en auth.users desde el cliente
-      // La invitación funcionará por email y se vinculará cuando el usuario acepte
-      // Verificar que no está invitándose a sí mismo
-      const { data: currentUser } = await supabase.auth.getUser()
-      if (currentUser?.user?.email?.toLowerCase() === email) {
-        setError(t.campaigns.cannotInviteYourself || "You cannot invite yourself")
-        return
+      let inviteeEmail: string = ""
+      let characterId: string | null = null
+
+      if (inviteType === "email") {
+        // Invitación por email
+        const email = inviteEmail.trim().toLowerCase()
+
+        // Validar formato de email básico
+        if (!email.includes("@") || !email.includes(".")) {
+          setError(t.campaigns.invalidEmail || "Invalid email format")
+          return
+        }
+
+        inviteeEmail = email
+
+        // Verificar que no está invitándose a sí mismo
+        const { data: currentUser } = await supabase.auth.getUser()
+        if (currentUser?.user?.email?.toLowerCase() === email) {
+          setError(t.campaigns.cannotInviteYourself || "You cannot invite yourself")
+          return
+        }
+
+        // Verificar si ya hay invitación pendiente para este email (sin character_id específico)
+        const { data: existingInvitation } = await supabase
+          .from("campaign_invitations")
+          .select("id")
+          .eq("campaign_id", selectedCampaign.id)
+          .eq("invitee_email", email)
+          .is("character_id", null)
+          .eq("status", "pending")
+          .maybeSingle()
+
+        if (existingInvitation) {
+          setError(t.campaigns.invitationAlreadySent || "Invitation already sent to this email")
+          return
+        }
+      } else {
+        // Invitación por personaje específico
+        if (!selectedInviteCharacterId) {
+          setError(t.campaigns.selectCharacterToInvite || "Please select a character to invite")
+          return
+        }
+
+        // También necesitamos el email para invitaciones por personaje
+        const email = inviteEmail.trim().toLowerCase()
+        if (!email.includes("@") || !email.includes(".")) {
+          setError(t.campaigns.invalidEmail || "Invalid email format. Please provide the user's email.")
+          return
+        }
+
+        // Obtener información del personaje
+        const { data: character, error: charError } = await supabase
+          .from("characters")
+          .select("id, user_id, name")
+          .eq("id", selectedInviteCharacterId)
+          .single()
+
+        if (charError || !character) {
+          setError(t.campaigns.characterNotFound || "Character not found")
+          return
+        }
+
+        // Verificar que no está invitándose a sí mismo
+        if (character.user_id === user.id) {
+          setError(t.campaigns.cannotInviteYourself || "You cannot invite your own character")
+          return
+        }
+
+        characterId = character.id
+        inviteeId = character.user_id
+        inviteeEmail = email
+
+        // Verificar si ya hay invitación pendiente para este personaje
+        const { data: existingInvitation } = await supabase
+          .from("campaign_invitations")
+          .select("id")
+          .eq("campaign_id", selectedCampaign.id)
+          .eq("character_id", characterId)
+          .eq("status", "pending")
+          .maybeSingle()
+
+        if (existingInvitation) {
+          setError(t.campaigns.invitationAlreadySent || "Invitation already sent to this character")
+          return
+        }
       }
 
-      // Verificar si ya hay invitación pendiente para este email
-      const { data: existingInvitation } = await supabase
-        .from("campaign_invitations")
-        .select("id")
-        .eq("campaign_id", selectedCampaign.id)
-        .eq("invitee_email", email)
-        .eq("status", "pending")
-        .maybeSingle()
-
-      if (existingInvitation) {
-        setError(t.campaigns.invitationAlreadySent || "Invitation already sent to this email")
-        return
-      }
-
-      // Crear invitación (con o sin invitee_id)
+      // Crear invitación
       const { error: inviteError } = await supabase
         .from("campaign_invitations")
         .insert({
           campaign_id: selectedCampaign.id,
           inviter_id: user.id,
           invitee_id: inviteeId || null,
-          invitee_email: email,
+          invitee_email: inviteeEmail,
+          character_id: characterId,
           message: inviteMessage.trim() || null,
         })
 
@@ -637,6 +901,8 @@ export function Campaigns({ language }: CampaignsProps) {
       setSuccess(t.campaigns.invitationSent || "Invitation sent successfully!")
       setInviteEmail("")
       setInviteMessage("")
+      setInviteType("email")
+      setSelectedInviteCharacterId("")
       setIsInviteDialogOpen(false)
       loadPendingInvitations()
     } catch (err: any) {
@@ -679,32 +945,52 @@ export function Campaigns({ language }: CampaignsProps) {
         return
       }
 
-      // Verificar que no es ya miembro
+      // Si la invitación tiene character_id, validar que coincida con el personaje activo
+      if (invitation.character_id) {
+        if (!activeCharacterId) {
+          setError(t.campaigns.invitationRequiresCharacter || "This invitation is for a specific character. Please select that character first.")
+          return
+        }
+        if (invitation.character_id !== activeCharacterId) {
+          setError(t.campaigns.invitationWrongCharacter || "This invitation is for a different character. Please select the correct character.")
+          return
+        }
+      }
+
+      // Si no hay personaje activo, no se puede aceptar (necesitamos character_id)
+      if (!activeCharacterId) {
+        setError(t.campaigns.selectCharacterFirst || "Please select a character first to accept the invitation.")
+        return
+      }
+
+      // Verificar que no es ya miembro con este personaje
       const { data: existingMember } = await supabase
         .from("campaign_members")
         .select("id")
         .eq("campaign_id", invitation.campaign_id)
         .eq("user_id", user.id)
+        .eq("character_id", activeCharacterId)
         .maybeSingle()
 
       if (existingMember) {
-        // Ya es miembro, solo marcar invitación como aceptada
+        // Ya es miembro con este personaje, solo marcar invitación como aceptada
         await supabase
           .from("campaign_invitations")
           .update({ status: "accepted", invitee_id: user.id })
           .eq("id", invitationId)
         
-        setSuccess(t.campaigns.invitationAccepted || "Invitation accepted! You are already a member.")
+        setSuccess(t.campaigns.invitationAccepted || "Invitation accepted! You are already a member with this character.")
         loadPendingInvitations()
         return
       }
 
-      // Agregar como miembro
+      // Agregar como miembro con el personaje activo
       const { error: memberError } = await supabase
         .from("campaign_members")
         .insert({
           campaign_id: invitation.campaign_id,
           user_id: user.id,
+          character_id: activeCharacterId,
           role: "player",
         })
 
@@ -749,7 +1035,7 @@ export function Campaigns({ language }: CampaignsProps) {
     }
   }
 
-  const isGM = (campaign: Campaign) => campaign.role === "game_master"
+  const isGM = (campaign: Campaign) => campaign.is_gm === true || campaign.role === "game_master"
 
   if (loading) {
     return (
@@ -764,7 +1050,19 @@ export function Campaigns({ language }: CampaignsProps) {
       <div className="flex justify-between items-center mb-6">
         <div>
           <h2 className="text-3xl font-bold">{t.campaigns.title || "Campaigns"}</h2>
-          <p className="text-muted-foreground">{t.campaigns.subtitle || "Manage your D&D campaigns"}</p>
+          <p className="text-muted-foreground">
+            {activeCharacterId
+              ? `${t.campaigns.subtitle || "Manage your D&D campaigns"} - ${t.campaigns.filteredByCharacter || "Filtered by active character"}`
+              : t.campaigns.subtitle || "Manage your D&D campaigns"}
+          </p>
+          {!activeCharacterId && (
+            <Alert className="mt-2">
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>
+                {t.campaigns.selectCharacterToView || "Please select a character to view their campaigns"}
+              </AlertDescription>
+            </Alert>
+          )}
         </div>
         <div className="flex gap-2">
           <Button onClick={() => setIsJoinDialogOpen(true)}>
@@ -888,21 +1186,29 @@ export function Campaigns({ language }: CampaignsProps) {
                     <CardHeader>
                       <div className="flex items-start justify-between">
                         <div>
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2 flex-wrap">
                             <CardTitle>{campaign.name}</CardTitle>
-                            <Badge variant={campaign.role === "game_master" ? "default" : "secondary"}>
-                              {campaign.role === "game_master" ? (
+                            {campaign.is_gm && (
+                              <Badge variant="default">
                                 <span className="flex items-center gap-1">
                                   <Crown className="h-3 w-3" /> GM
                                 </span>
-                              ) : (
-                                <span>{t.campaigns.player || "Player"}</span>
-                              )}
-                            </Badge>
+                              </Badge>
+                            )}
+                            {campaign.is_player && (
+                              <Badge variant="secondary">
+                                <span>
+                                  {t.campaigns.player || "Player"}
+                                  {campaign.character_id && activeCharacter?.id === campaign.character_id && activeCharacter?.name
+                                    ? ` (${activeCharacter.name})`
+                                    : ""}
+                                </span>
+                              </Badge>
+                            )}
                           </div>
                           <CardDescription>{campaign.description}</CardDescription>
                         </div>
-                        {campaign.role === "game_master" && (
+                        {campaign.is_gm && (
                           <Button
                             variant="destructive"
                             size="sm"
@@ -1009,21 +1315,29 @@ export function Campaigns({ language }: CampaignsProps) {
                     <CardHeader>
                       <div className="flex items-start justify-between">
                         <div>
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2 flex-wrap">
                             <CardTitle>{campaign.name}</CardTitle>
-                            <Badge variant={campaign.role === "game_master" ? "default" : "secondary"}>
-                              {campaign.role === "game_master" ? (
+                            {campaign.is_gm && (
+                              <Badge variant="default">
                                 <span className="flex items-center gap-1">
                                   <Crown className="h-3 w-3" /> GM
                                 </span>
-                              ) : (
-                                <span>{t.campaigns.player || "Player"}</span>
-                              )}
-                            </Badge>
+                              </Badge>
+                            )}
+                            {campaign.is_player && (
+                              <Badge variant="secondary">
+                                <span>
+                                  {t.campaigns.player || "Player"}
+                                  {campaign.character_id && activeCharacter?.id === campaign.character_id && activeCharacter?.name
+                                    ? ` (${activeCharacter.name})`
+                                    : ""}
+                                </span>
+                              </Badge>
+                            )}
                           </div>
                           <CardDescription>{campaign.description}</CardDescription>
                         </div>
-                        {campaign.role === "game_master" && (
+                        {campaign.is_gm && (
                           <Button
                             variant="destructive"
                             size="sm"
@@ -1056,10 +1370,16 @@ export function Campaigns({ language }: CampaignsProps) {
                   {t.campaigns.noCampaigns || "You are not part of any campaigns yet."}
                 </CardContent>
               </Card>
-            ) : (
-              campaigns
-                .filter((c) => !isGM(c))
-                .map((campaign) => (
+            ) : (() => {
+              const playerCampaigns = campaigns.filter((c) => c.is_player && !c.is_gm)
+              return playerCampaigns.length === 0 ? (
+                <Card>
+                  <CardContent className="pt-6 text-center">
+                    {t.campaigns.noPlayerCampaigns || "You are not a player in any campaigns yet. Join a campaign to get started!"}
+                  </CardContent>
+                </Card>
+              ) : (
+                playerCampaigns.map((campaign) => (
                   <Card
                     key={campaign.id}
                     className="cursor-pointer hover:bg-accent"
@@ -1068,17 +1388,18 @@ export function Campaigns({ language }: CampaignsProps) {
                     <CardHeader>
                       <div className="flex items-start justify-between">
                         <div>
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2 flex-wrap">
                             <CardTitle>{campaign.name}</CardTitle>
-                            <Badge variant={campaign.role === "game_master" ? "default" : "secondary"}>
-                              {campaign.role === "game_master" ? (
-                                <span className="flex items-center gap-1">
-                                  <Crown className="h-3 w-3" /> GM
+                            {campaign.is_player && (
+                              <Badge variant="secondary">
+                                <span>
+                                  {t.campaigns.player || "Player"}
+                                  {campaign.character_id && activeCharacter?.id === campaign.character_id && activeCharacter?.name
+                                    ? ` (${activeCharacter.name})`
+                                    : ""}
                                 </span>
-                              ) : (
-                                <span>{t.campaigns.player || "Player"}</span>
-                              )}
-                            </Badge>
+                              </Badge>
+                            )}
                           </div>
                           <CardDescription>{campaign.description}</CardDescription>
                         </div>
@@ -1086,7 +1407,8 @@ export function Campaigns({ language }: CampaignsProps) {
                     </CardHeader>
                   </Card>
                 ))
-            )}
+              )
+            })()}
           </div>
         </TabsContent>
       </Tabs>
@@ -1173,7 +1495,7 @@ export function Campaigns({ language }: CampaignsProps) {
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
                 {selectedCampaign.name}
-                {isGM(selectedCampaign) && (
+                {selectedCampaign.is_gm && (
                   <Badge variant="default">
                     <Crown className="w-3 h-3 mr-1" />
                     GM
@@ -1188,7 +1510,7 @@ export function Campaigns({ language }: CampaignsProps) {
             <Tabs defaultValue="overview" className="w-full">
               <TabsList className="grid w-full grid-cols-2">
                 <TabsTrigger value="overview">{t.campaigns.overview || "Overview"}</TabsTrigger>
-                {selectedCampaign.role === "game_master" && (
+                {selectedCampaign.is_gm && (
                   <TabsTrigger value="members">{t.campaigns.members || "Members"}</TabsTrigger>
                 )}
               </TabsList>
@@ -1199,7 +1521,7 @@ export function Campaigns({ language }: CampaignsProps) {
                   <p>{selectedCampaign.description || t.campaigns.noDescription || "No description provided"}</p>
                 </div>
 
-                {selectedCampaign.role === "game_master" && (
+                {selectedCampaign.is_gm && (
                   <>
                     <div>
                       <h4 className="font-semibold mb-2">{t.campaigns.inviteCode || "Invite Code"}</h4>
@@ -1263,19 +1585,22 @@ export function Campaigns({ language }: CampaignsProps) {
                                   <Crown className="h-3 w-3" /> GM
                                 </span>
                               ) : (
-                                member.role
+                                <span>{t.campaigns.player || "Player"}</span>
                               )}
                             </Badge>
                           </div>
-                          {member.role !== "game_master" && (
+                          {/* Solo mostrar botón de eliminar para players si eres GM */}
+                          {member.role !== "game_master" && selectedCampaign?.is_gm && (
                             <Button
                               variant="ghost"
                               size="sm"
                               onClick={() => {
-                                // Future: implement kick member functionality
+                                // TODO: implementar funcionalidad para eliminar miembro
+                                // Por ahora, este botón no hace nada
                               }}
+                              title={t.campaigns.removeMember || "Remove member"}
                             >
-                              <UserPlus className="h-4 w-4" />
+                              <LogOut className="h-4 w-4" />
                             </Button>
                           )}
                         </div>
@@ -1295,24 +1620,77 @@ export function Campaigns({ language }: CampaignsProps) {
           <DialogHeader>
             <DialogTitle>{t.campaigns.invitePlayer || "Invite Player"}</DialogTitle>
             <DialogDescription>
-              {t.campaigns.invitePlayerDescription || "Enter the email address of the user you want to invite to this campaign"}
+              {t.campaigns.invitePlayerDescription || "Invite a player by email or select a specific character"}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
+            {/* Tipo de invitación */}
             <div>
-              <Label htmlFor="inviteEmail">{t.campaigns.email || "Email Address"}</Label>
-              <Input
-                id="inviteEmail"
-                type="email"
-                value={inviteEmail}
-                onChange={(e) => setInviteEmail(e.target.value)}
-                placeholder={t.campaigns.emailPlaceholder || "Enter email address"}
-                className="mt-1"
-              />
-              <p className="text-xs text-muted-foreground mt-1">
-                {t.campaigns.inviteEmailDescription || "Enter the email address of the user you want to invite"}
-              </p>
+              <Label>{t.campaigns.inviteType || "Invitation Type"}</Label>
+              <Tabs value={inviteType} onValueChange={(value) => setInviteType(value as "email" | "character")} className="mt-2">
+                <TabsList className="grid w-full grid-cols-2">
+                  <TabsTrigger value="email">
+                    <Mail className="h-4 w-4 mr-2" />
+                    {t.campaigns.byEmail || "By Email"}
+                  </TabsTrigger>
+                  <TabsTrigger value="character">
+                    <UserPlus className="h-4 w-4 mr-2" />
+                    {t.campaigns.byCharacter || "By Character"}
+                  </TabsTrigger>
+                </TabsList>
+              </Tabs>
             </div>
+
+            {/* Contenido según el tipo */}
+            {inviteType === "email" ? (
+              <div>
+                <Label htmlFor="inviteEmail">{t.campaigns.email || "Email Address"}</Label>
+                <Input
+                  id="inviteEmail"
+                  type="email"
+                  value={inviteEmail}
+                  onChange={(e) => setInviteEmail(e.target.value)}
+                  placeholder={t.campaigns.emailPlaceholder || "Enter email address"}
+                  className="mt-1"
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  {t.campaigns.inviteEmailDescription || "Enter the email address of the user you want to invite"}
+                </p>
+              </div>
+            ) : (
+              <>
+                <div>
+                  <Label htmlFor="inviteEmail">{t.campaigns.email || "Email Address"}</Label>
+                  <Input
+                    id="inviteEmail"
+                    type="email"
+                    value={inviteEmail}
+                    onChange={(e) => setInviteEmail(e.target.value)}
+                    placeholder={t.campaigns.emailPlaceholder || "Enter email address"}
+                    className="mt-1"
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {t.campaigns.inviteEmailForCharacter || "Enter the email of the user who owns the character"}
+                  </p>
+                </div>
+                <div>
+                  <Label htmlFor="inviteCharacter">{t.campaigns.selectCharacter || "Select Character"}</Label>
+                  <Input
+                    id="inviteCharacter"
+                    type="text"
+                    value={selectedInviteCharacterId}
+                    onChange={(e) => setSelectedInviteCharacterId(e.target.value)}
+                    placeholder={t.campaigns.characterIdPlaceholder || "Enter character ID (UUID)"}
+                    className="mt-1"
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {t.campaigns.inviteCharacterDescription || "Enter the character ID to invite a specific character. The user will need to accept with that character."}
+                  </p>
+                </div>
+              </>
+            )}
+
+            {/* Mensaje opcional */}
             <div>
               <Label htmlFor="inviteMessage">{t.campaigns.message || "Message (Optional)"}</Label>
               <Textarea
@@ -1324,10 +1702,15 @@ export function Campaigns({ language }: CampaignsProps) {
                 className="mt-1"
               />
             </div>
+
             <Button
               onClick={handleSendInvitation}
               className="w-full"
-              disabled={!inviteEmail.trim()}
+              disabled={
+                inviteType === "email" 
+                  ? !inviteEmail.trim() 
+                  : !inviteEmail.trim() || !selectedInviteCharacterId.trim()
+              }
             >
               <Mail className="h-4 w-4 mr-2" />
               {t.campaigns.sendInvitation || "Send Invitation"}

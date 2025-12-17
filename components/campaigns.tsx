@@ -100,7 +100,7 @@ export function Campaigns({ language }: CampaignsProps) {
 
       if (memberError) throw memberError
 
-      const campaignIds = memberData.map((m) => m.campaign_id)
+      const campaignIds = (memberData || []).map((m: { campaign_id: string; role: string }) => m.campaign_id)
 
       if (campaignIds.length === 0) {
         setCampaigns([])
@@ -120,7 +120,7 @@ export function Campaigns({ language }: CampaignsProps) {
       // Attach role to each campaign
       const campaignsWithRole = campaignsData.map((campaign) => ({
         ...campaign,
-        role: memberData.find((m) => m.campaign_id === campaign.id)?.role,
+        role: (memberData || []).find((m: { campaign_id: string; role: string }) => m.campaign_id === campaign.id)?.role,
       }))
 
       setCampaigns(campaignsWithRole)
@@ -275,7 +275,7 @@ export function Campaigns({ language }: CampaignsProps) {
         .eq("campaign_id", campaign.id)
         .eq("user_id", user.id)
         .eq("role", "player")
-        .single()
+        .maybeSingle()
 
       if (existingMember) {
         setError(t.campaigns.alreadyMember || "You are already a member of this campaign")
@@ -296,7 +296,7 @@ export function Campaigns({ language }: CampaignsProps) {
             .select("role")
             .eq("campaign_id", campaign.id)
             .eq("user_id", user.id)
-            .single()
+            .maybeSingle()
 
           if (checkMember?.role === "player") {
             setError(t.campaigns.alreadyMember || "You are already a member of this campaign")
@@ -403,38 +403,91 @@ export function Campaigns({ language }: CampaignsProps) {
   }
 
   const loadPendingInvitations = async () => {
-    if (!user) return
+    if (!user) {
+      console.log("[v0] loadPendingInvitations: No user, skipping")
+      return
+    }
 
     try {
       // Obtener email del usuario actual
       const { data: userData } = await supabase.auth.getUser()
       const userEmail = userData?.user?.email?.toLowerCase()
 
+      console.log("[v0] loadPendingInvitations: User ID:", user.id, "Email:", userEmail)
+
       if (!userEmail) {
+        console.warn("[v0] loadPendingInvitations: No user email found")
         setPendingInvitations([])
         return
       }
 
       // Buscar invitaciones por invitee_id O por invitee_email
-      const { data, error } = await supabase
+      // Usar dos consultas separadas porque .or() puede tener problemas con RLS
+      console.log("[v0] loadPendingInvitations: Searching by invitee_id:", user.id)
+      const { data: dataById, error: errorById } = await supabase
         .from("campaign_invitations")
         .select("*")
-        .or(`invitee_id.eq.${user.id},invitee_email.eq.${userEmail}`)
+        .eq("invitee_id", user.id)
         .eq("status", "pending")
-        .order("created_at", { ascending: false })
+
+      console.log("[v0] loadPendingInvitations: Search by ID result:", { data: dataById?.length || 0, error: errorById })
+
+      console.log("[v0] loadPendingInvitations: Searching by invitee_email:", userEmail)
+      const { data: dataByEmail, error: errorByEmail } = await supabase
+        .from("campaign_invitations")
+        .select("*")
+        .eq("invitee_email", userEmail)
+        .is("invitee_id", null) // Solo las que no tienen invitee_id (para evitar duplicados)
+        .eq("status", "pending")
+
+      console.log("[v0] loadPendingInvitations: Search by email result:", { data: dataByEmail?.length || 0, error: errorByEmail })
+
+      if (errorById || errorByEmail) {
+        const error = errorById || errorByEmail
+        console.error("[v0] Error loading invitations:", error)
+        // Si es un error de permisos, mostrar mensaje más claro
+        if (error?.code === '42501' || error?.message?.includes('permission denied')) {
+          console.error("[v0] ❌ PERMISSION DENIED - RLS policies need to be fixed!")
+          console.error("[v0] Please run script: 049_fix_campaign_invitations_rls.sql")
+          setError("Error loading invitations: Permission denied. Please check RLS policies.")
+        }
+        setPendingInvitations([])
+        return
+      }
+
+      // Combinar resultados y eliminar duplicados
+      const allInvitations = [...(dataById || []), ...(dataByEmail || [])]
+      const uniqueInvitations = allInvitations.filter(
+        (inv, index, self) => index === self.findIndex((i) => i.id === inv.id)
+      )
+
+      console.log("[v0] loadPendingInvitations: Combined invitations:", uniqueInvitations.length)
+
+      const { data, error } = { 
+        data: uniqueInvitations.sort((a, b) => 
+          new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+        ), 
+        error: null 
+      }
 
       if (error) throw error
 
       if (!data || data.length === 0) {
+        console.log("[v0] loadPendingInvitations: No invitations found")
         setPendingInvitations([])
         return
       }
+
+      console.log("[v0] loadPendingInvitations: Found", data.length, "invitations")
 
       // Obtener información de campañas e invitadores
       const campaignIds = [...new Set(data.map((inv: any) => inv.campaign_id))]
       const inviterIds = [...new Set(data.map((inv: any) => inv.inviter_id))]
 
-      const [campaignsData, profilesData] = await Promise.all([
+      console.log("[v0] loadPendingInvitations: Fetching campaign data for IDs:", campaignIds)
+      console.log("[v0] loadPendingInvitations: Fetching profile data for IDs:", inviterIds)
+
+      const [campaignsResult, profilesResult] = await Promise.all([
         supabase
           .from("campaigns")
           .select("id, name")
@@ -445,17 +498,59 @@ export function Campaigns({ language }: CampaignsProps) {
           .in("id", inviterIds),
       ])
 
-      const invitations = data.map((inv: any) => ({
-        ...inv,
-        campaign_name: campaignsData.data?.find((c) => c.id === inv.campaign_id)?.name || "Unknown Campaign",
-        inviter_name:
-          profilesData.data?.find((p) => p.id === inv.inviter_id)?.display_name ||
-          "Unknown",
-      }))
+      console.log("[v0] loadPendingInvitations: Campaigns query result:", {
+        data: campaignsResult.data?.length || 0,
+        error: campaignsResult.error,
+        campaignIds: campaignsResult.data?.map((c: any) => ({ id: c.id, name: c.name }))
+      })
+
+      console.log("[v0] loadPendingInvitations: Profiles query result:", {
+        data: profilesResult.data?.length || 0,
+        error: profilesResult.error,
+        profileIds: profilesResult.data?.map((p: any) => ({ id: p.id, name: p.display_name }))
+      })
+
+      // Si hay errores, loguearlos pero continuar
+      if (campaignsResult.error) {
+        console.error("[v0] Error fetching campaigns:", campaignsResult.error)
+        if (campaignsResult.error.code === '42501' || campaignsResult.error.message?.includes('permission denied')) {
+          console.error("[v0] ❌ Permission denied for campaigns - RLS policy may be blocking access")
+        }
+      }
+
+      if (profilesResult.error) {
+        console.error("[v0] Error fetching profiles:", profilesResult.error)
+        if (profilesResult.error.code === '42501' || profilesResult.error.message?.includes('permission denied')) {
+          console.error("[v0] ❌ Permission denied for profiles - RLS policy may be blocking access")
+        }
+      }
+
+      const invitations = data.map((inv: any) => {
+        const campaign = campaignsResult.data?.find((c: any) => c.id === inv.campaign_id)
+        const profile = profilesResult.data?.find((p: any) => p.id === inv.inviter_id)
+        
+        console.log("[v0] Mapping invitation:", {
+          invitationId: inv.id,
+          campaignId: inv.campaign_id,
+          campaignFound: !!campaign,
+          campaignName: campaign?.name,
+          inviterId: inv.inviter_id,
+          profileFound: !!profile,
+          profileName: profile?.display_name
+        })
+
+        return {
+          ...inv,
+          campaign_name: campaign?.name || "Unknown Campaign",
+          inviter_name: profile?.display_name || "Unknown",
+        }
+      })
 
       setPendingInvitations(invitations)
+      console.log("[v0] loadPendingInvitations: Successfully loaded", invitations.length, "invitations")
     } catch (err: any) {
       console.error("[v0] Error loading pending invitations:", err)
+      setPendingInvitations([])
     }
   }
 
@@ -494,66 +589,33 @@ export function Campaigns({ language }: CampaignsProps) {
         return
       }
 
-      // Buscar usuario por email usando RPC o función
-      // Primero intentar encontrar el usuario por email
-      const { data: authUsers, error: searchError } = await supabase.rpc("get_user_by_email", {
-        user_email: email
-      }).catch(() => {
-        // Si la función no existe, buscar en profiles (si tienen email)
-        // Por ahora, crear invitación solo con email
-        return { data: null, error: null }
-      })
-
+      // Buscar usuario por email (no podemos acceder directamente a auth.users desde el cliente)
+      // Por ahora, creamos la invitación solo con email
+      // Si el usuario existe y se registra después, se vinculará automáticamente cuando acepte
       let inviteeId: string | null = null
-      if (authUsers && authUsers.length > 0) {
-        inviteeId = authUsers[0].id
-        
-        // Verificar que no es el mismo usuario
-        if (inviteeId === user.id) {
-          setError(t.campaigns.cannotInviteYourself || "You cannot invite yourself")
-          return
-        }
+      
+      // Intentar buscar si hay un usuario con ese email en la base de datos
+      // Nota: No podemos buscar directamente en auth.users desde el cliente
+      // La invitación funcionará por email y se vinculará cuando el usuario acepte
+      // Verificar que no está invitándose a sí mismo
+      const { data: currentUser } = await supabase.auth.getUser()
+      if (currentUser?.user?.email?.toLowerCase() === email) {
+        setError(t.campaigns.cannotInviteYourself || "You cannot invite yourself")
+        return
+      }
 
-        // Verificar que no es ya miembro
-        const { data: existingMember } = await supabase
-          .from("campaign_members")
-          .select("id")
-          .eq("campaign_id", selectedCampaign.id)
-          .eq("user_id", inviteeId)
-          .single()
+      // Verificar si ya hay invitación pendiente para este email
+      const { data: existingInvitation } = await supabase
+        .from("campaign_invitations")
+        .select("id")
+        .eq("campaign_id", selectedCampaign.id)
+        .eq("invitee_email", email)
+        .eq("status", "pending")
+        .maybeSingle()
 
-        if (existingMember) {
-          setError(t.campaigns.userAlreadyMember || "User is already a member of this campaign")
-          return
-        }
-
-        // Verificar que no hay invitación pendiente
-        const { data: existingInvitation } = await supabase
-          .from("campaign_invitations")
-          .select("id")
-          .eq("campaign_id", selectedCampaign.id)
-          .eq("invitee_id", inviteeId)
-          .eq("status", "pending")
-          .single()
-
-        if (existingInvitation) {
-          setError(t.campaigns.invitationAlreadySent || "Invitation already sent to this user")
-          return
-        }
-      } else {
-        // Verificar si ya hay invitación pendiente para este email
-        const { data: existingInvitation } = await supabase
-          .from("campaign_invitations")
-          .select("id")
-          .eq("campaign_id", selectedCampaign.id)
-          .eq("invitee_email", email)
-          .eq("status", "pending")
-          .single()
-
-        if (existingInvitation) {
-          setError(t.campaigns.invitationAlreadySent || "Invitation already sent to this email")
-          return
-        }
+      if (existingInvitation) {
+        setError(t.campaigns.invitationAlreadySent || "Invitation already sent to this email")
+        return
       }
 
       // Crear invitación (con o sin invitee_id)
@@ -562,12 +624,15 @@ export function Campaigns({ language }: CampaignsProps) {
         .insert({
           campaign_id: selectedCampaign.id,
           inviter_id: user.id,
-          invitee_id: inviteeId,
+          invitee_id: inviteeId || null,
           invitee_email: email,
           message: inviteMessage.trim() || null,
         })
 
-      if (inviteError) throw inviteError
+      if (inviteError) {
+        console.error("[v0] Error creating invitation:", inviteError)
+        throw inviteError
+      }
 
       setSuccess(t.campaigns.invitationSent || "Invitation sent successfully!")
       setInviteEmail("")
@@ -620,7 +685,7 @@ export function Campaigns({ language }: CampaignsProps) {
         .select("id")
         .eq("campaign_id", invitation.campaign_id)
         .eq("user_id", user.id)
-        .single()
+        .maybeSingle()
 
       if (existingMember) {
         // Ya es miembro, solo marcar invitación como aceptada
@@ -725,7 +790,14 @@ export function Campaigns({ language }: CampaignsProps) {
 
       <Tabs defaultValue="all" className="w-full">
         <TabsList>
-          <TabsTrigger value="all">{t.campaigns.allCampaigns || "All Campaigns"}</TabsTrigger>
+          <TabsTrigger value="all" className="relative">
+            {t.campaigns.allCampaigns || "All Campaigns"}
+            {pendingInvitations.length > 0 && (
+              <Badge variant="destructive" className="ml-2 h-5 w-5 rounded-full p-0 flex items-center justify-center text-xs">
+                {pendingInvitations.length}
+              </Badge>
+            )}
+          </TabsTrigger>
           <TabsTrigger value="gm">{t.campaigns.asGM || "As Game Master"}</TabsTrigger>
           <TabsTrigger value="player">{t.campaigns.asPlayer || "As Player"}</TabsTrigger>
         </TabsList>
@@ -733,52 +805,74 @@ export function Campaigns({ language }: CampaignsProps) {
         <TabsContent value="all" className="mt-6">
           {/* Campaign List - Todas las campañas disponibles */}
           <div className="space-y-4">
-            {/* Invitaciones pendientes */}
+            {/* Buzón de Invitaciones - Destacado */}
             {pendingInvitations.length > 0 && (
-              <div className="space-y-4 mb-6">
-                <h3 className="text-lg font-semibold">{t.campaigns.pendingInvitations || "Pending Invitations"}</h3>
-                {pendingInvitations.map((invitation) => (
-                  <Card key={invitation.id} className="border-2 border-primary/20">
-                    <CardHeader>
-                      <div className="flex items-start justify-between">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2 mb-2">
-                            <CardTitle>{invitation.campaign_name}</CardTitle>
-                            <Badge variant="outline">
-                              <Mail className="h-3 w-3 mr-1" />
-                              {t.campaigns.invitation || "Invitation"}
-                            </Badge>
+              <Card className="border-2 border-primary bg-primary/5">
+                <CardHeader>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Mail className="h-5 w-5 text-primary" />
+                      <CardTitle className="text-lg">
+                        {t.campaigns.pendingInvitations || "Pending Invitations"}
+                      </CardTitle>
+                      <Badge variant="default" className="ml-2">
+                        {pendingInvitations.length}
+                      </Badge>
+                    </div>
+                  </div>
+                  <CardDescription>
+                    {t.campaigns.invitationsDescription || "You have pending campaign invitations"}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-3">
+                    {pendingInvitations.map((invitation) => (
+                      <Card key={invitation.id} className="border border-primary/20">
+                        <CardContent className="pt-4">
+                          <div className="flex items-start justify-between">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2 mb-2">
+                                <CardTitle className="text-base">{invitation.campaign_name}</CardTitle>
+                                <Badge variant="outline">
+                                  <Mail className="h-3 w-3 mr-1" />
+                                  {t.campaigns.invitation || "Invitation"}
+                                </Badge>
+                              </div>
+                              <CardDescription className="mb-2">
+                                {t.campaigns.invitedBy || "Invited by"}: <strong>{invitation.inviter_name}</strong>
+                              </CardDescription>
+                              {invitation.message && (
+                                <p className="text-sm text-muted-foreground mb-2 italic">"{invitation.message}"</p>
+                              )}
+                              <p className="text-xs text-muted-foreground">
+                                {new Date(invitation.created_at).toLocaleDateString()}
+                              </p>
+                            </div>
+                            <div className="flex gap-2 ml-4">
+                              <Button
+                                variant="default"
+                                size="sm"
+                                onClick={() => handleAcceptInvitation(invitation.id)}
+                              >
+                                <Check className="h-4 w-4 mr-2" />
+                                {t.campaigns.accept || "Accept"}
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleRejectInvitation(invitation.id)}
+                              >
+                                <X className="h-4 w-4 mr-2" />
+                                {t.campaigns.reject || "Reject"}
+                              </Button>
+                            </div>
                           </div>
-                          <CardDescription className="mb-2">
-                            {t.campaigns.invitedBy || "Invited by"}: {invitation.inviter_name}
-                          </CardDescription>
-                          {invitation.message && (
-                            <p className="text-sm text-muted-foreground mb-2">{invitation.message}</p>
-                          )}
-                        </div>
-                        <div className="flex gap-2">
-                          <Button
-                            variant="default"
-                            size="sm"
-                            onClick={() => handleAcceptInvitation(invitation.id)}
-                          >
-                            <Check className="h-4 w-4 mr-2" />
-                            {t.campaigns.accept || "Accept"}
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleRejectInvitation(invitation.id)}
-                          >
-                            <X className="h-4 w-4 mr-2" />
-                            {t.campaigns.reject || "Reject"}
-                          </Button>
-                        </div>
-                      </div>
-                    </CardHeader>
-                  </Card>
-                ))}
-              </div>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
             )}
 
             {/* Campañas donde el usuario es miembro */}
@@ -1106,19 +1200,35 @@ export function Campaigns({ language }: CampaignsProps) {
                 </div>
 
                 {selectedCampaign.role === "game_master" && (
-                  <div>
-                    <h4 className="font-semibold mb-2">{t.campaigns.inviteCode || "Invite Code"}</h4>
-                    <div className="flex gap-2">
-                      <Input value={selectedCampaign.invite_code || "N/A"} readOnly />
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleCopyInviteCode(selectedCampaign.invite_code)}
-                      >
-                        <Copy className="h-4 w-4" />
-                      </Button>
+                  <>
+                    <div>
+                      <h4 className="font-semibold mb-2">{t.campaigns.inviteCode || "Invite Code"}</h4>
+                      <div className="flex gap-2">
+                        <Input value={selectedCampaign.invite_code || "N/A"} readOnly />
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleCopyInviteCode(selectedCampaign.invite_code)}
+                        >
+                          <Copy className="h-4 w-4" />
+                        </Button>
+                      </div>
                     </div>
-                  </div>
+                    <div>
+                      <h4 className="font-semibold mb-2">{t.campaigns.invitePlayer || "Invite Players"}</h4>
+                      <Button
+                        variant="default"
+                        className="w-full"
+                        onClick={() => setIsInviteDialogOpen(true)}
+                      >
+                        <UserPlus className="h-4 w-4 mr-2" />
+                        {t.campaigns.invitePlayer || "Invite Player"}
+                      </Button>
+                      <p className="text-xs text-muted-foreground mt-2">
+                        {t.campaigns.invitePlayerHint || "Send an invitation by email to add players to this campaign"}
+                      </p>
+                    </div>
+                  </>
                 )}
 
                 <Button onClick={() => handleLeaveCampaign(selectedCampaign.id)} variant="outline" className="w-full">

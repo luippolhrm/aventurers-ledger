@@ -9,8 +9,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { AlertCircle, Copy, Crown, Trash2, UserPlus, LogOut, Mail, Check, X } from "lucide-react"
+import { AlertCircle, Copy, Crown, Trash2, UserPlus, LogOut } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { createBrowserClient } from "@/lib/supabase/client"
 import { useAuth } from "@/lib/auth-context"
@@ -44,20 +43,6 @@ interface CampaignMember {
   user_display_name?: string | null
 }
 
-interface CampaignInvitation {
-  id: string
-  campaign_id: string
-  inviter_id: string
-  invitee_id: string | null
-  invitee_email: string
-  character_id: string | null
-  status: "pending" | "accepted" | "rejected" | "cancelled"
-  message: string | null
-  created_at: string
-  campaign_name?: string
-  inviter_name?: string
-}
-
 interface CampaignsProps {
   language: Language
 }
@@ -69,12 +54,9 @@ export function Campaigns({ language }: CampaignsProps) {
   const supabase = createBrowserClient()
 
   const [campaigns, setCampaigns] = useState<Campaign[]>([])
-  const [allAvailableCampaigns, setAllAvailableCampaigns] = useState<Campaign[]>([]) // Todas las campañas disponibles
-  const [pendingInvitations, setPendingInvitations] = useState<CampaignInvitation[]>([]) // Invitaciones pendientes
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
   const [isJoinDialogOpen, setIsJoinDialogOpen] = useState(false)
   const [isViewDialogOpen, setIsViewDialogOpen] = useState(false)
-  const [isInviteDialogOpen, setIsInviteDialogOpen] = useState(false)
   const [selectedCampaign, setSelectedCampaign] = useState<Campaign | null>(null)
   const [members, setMembers] = useState<CampaignMember[]>([])
   const [loading, setLoading] = useState(true)
@@ -85,20 +67,9 @@ export function Campaigns({ language }: CampaignsProps) {
   const [campaignName, setCampaignName] = useState("")
   const [campaignDescription, setCampaignDescription] = useState("")
   const [inviteCode, setInviteCode] = useState("")
-  
-  // Invitation states
-  const [inviteEmail, setInviteEmail] = useState("")
-  const [inviteMessage, setInviteMessage] = useState("")
-  const [inviteType, setInviteType] = useState<"email" | "character">("email")
-  const [selectedInviteCharacterId, setSelectedInviteCharacterId] = useState<string>("")
-  const [availableCharacters, setAvailableCharacters] = useState<Array<{ id: string; name: string; user_id: string }>>([])
-  const [searchResults, setSearchResults] = useState<any[]>([])
-  const [isSearching, setIsSearching] = useState(false)
 
   useEffect(() => {
     loadCampaigns()
-    loadAllAvailableCampaigns()
-    loadPendingInvitations()
   }, [activeCharacterId, user])
 
   // Auto-hide success message after 5 seconds
@@ -276,83 +247,6 @@ export function Campaigns({ language }: CampaignsProps) {
     }
   }
 
-  const loadAllAvailableCampaigns = async () => {
-    if (!user) return
-
-    try {
-      // Verificar si el usuario tiene personajes creados
-      const { data: characters, error: charactersError } = await supabase
-        .from("characters")
-        .select("id")
-        .eq("user_id", user.id)
-        .limit(1)
-
-      if (charactersError) {
-        console.error("[v0] Error checking characters:", charactersError)
-        return
-      }
-
-      // Si no tiene personajes, no mostrar campañas disponibles
-      if (!characters || characters.length === 0) {
-        setAllAvailableCampaigns([])
-        return
-      }
-
-      // Obtener todas las campañas activas (donde el usuario NO es miembro)
-      const { data: memberData } = await supabase
-        .from("campaign_members")
-        .select("campaign_id")
-        .eq("user_id", user.id)
-
-      const userCampaignIds = memberData?.map((m) => m.campaign_id) || []
-
-      // Obtener todas las campañas activas
-      const { data: allCampaigns, error: campaignsError } = await supabase
-        .from("campaigns")
-        .select("*, game_master_id")
-        .eq("status", "active")
-        .order("created_at", { ascending: false })
-
-      if (campaignsError) {
-        console.error("[v0] Error loading all campaigns:", campaignsError)
-        return
-      }
-
-      // Filtrar campañas donde el usuario NO es miembro
-      const availableCampaigns = (allCampaigns || []).filter(
-        (campaign) => !userCampaignIds.includes(campaign.id)
-      )
-
-      // Obtener información de los creadores (game masters)
-      const creatorIds = [...new Set(availableCampaigns.map((c) => c.game_master_id))]
-      
-      if (creatorIds.length > 0) {
-        // Intentar obtener profiles (puede fallar si RLS está habilitado)
-        const { data: profiles, error: profilesError } = await supabase
-          .from("profiles")
-          .select("id, display_name")
-          .in("id", creatorIds)
-
-        // Si hay error de RLS, usar fallback
-        if (profilesError) {
-          console.warn("[v0] Could not load creator profiles (RLS restriction):", profilesError)
-        }
-
-        // Agregar nombre del creador a cada campaña
-        const campaignsWithCreator = availableCampaigns.map((campaign) => ({
-          ...campaign,
-          creator_name: profiles?.find((p) => p.id === campaign.game_master_id)?.display_name || t.campaigns.gameMaster || "Game Master",
-        }))
-
-        setAllAvailableCampaigns(campaignsWithCreator)
-      } else {
-        setAllAvailableCampaigns([])
-      }
-    } catch (err: any) {
-      console.error("[v0] Error loading all available campaigns:", err)
-    }
-  }
-
   const handleCreateCampaign = async () => {
     if (!user || !campaignName.trim()) return
 
@@ -469,7 +363,6 @@ export function Campaigns({ language }: CampaignsProps) {
       setInviteCode("")
       setIsJoinDialogOpen(false)
       loadCampaigns()
-      loadAllAvailableCampaigns() // Recargar campañas disponibles
     } catch (err: any) {
       console.error("[v0] Error joining campaign:", err)
       setError(err.message)
@@ -597,444 +490,6 @@ export function Campaigns({ language }: CampaignsProps) {
     }
   }
 
-  const loadPendingInvitations = async () => {
-    if (!user) {
-      console.log("[v0] loadPendingInvitations: No user, skipping")
-      return
-    }
-
-    try {
-      // Obtener email del usuario actual
-      const { data: userData } = await supabase.auth.getUser()
-      const userEmail = userData?.user?.email?.toLowerCase()
-
-      console.log("[v0] loadPendingInvitations: User ID:", user.id, "Email:", userEmail)
-
-      if (!userEmail) {
-        console.warn("[v0] loadPendingInvitations: No user email found")
-        setPendingInvitations([])
-        return
-      }
-
-      // Buscar invitaciones por invitee_id O por invitee_email
-      // Si hay personaje activo, filtrar por character_id (debe coincidir o ser NULL)
-      // Usar dos consultas separadas porque .or() puede tener problemas con RLS
-      console.log("[v0] loadPendingInvitations: Searching by invitee_id:", user.id, "activeCharacterId:", activeCharacterId)
-      
-      let queryById = supabase
-        .from("campaign_invitations")
-        .select("*")
-        .eq("invitee_id", user.id)
-        .eq("status", "pending")
-
-      // Si hay personaje activo, filtrar por character_id (debe coincidir o ser NULL)
-      if (activeCharacterId) {
-        queryById = queryById.or(`character_id.eq.${activeCharacterId},character_id.is.null`)
-      }
-
-      const { data: dataById, error: errorById } = await queryById
-
-      console.log("[v0] loadPendingInvitations: Search by ID result:", { data: dataById?.length || 0, error: errorById })
-
-      console.log("[v0] loadPendingInvitations: Searching by invitee_email:", userEmail)
-      
-      let queryByEmail = supabase
-        .from("campaign_invitations")
-        .select("*")
-        .eq("invitee_email", userEmail)
-        .is("invitee_id", null) // Solo las que no tienen invitee_id (para evitar duplicados)
-        .eq("status", "pending")
-
-      // Si hay personaje activo, filtrar por character_id (debe coincidir o ser NULL)
-      if (activeCharacterId) {
-        queryByEmail = queryByEmail.or(`character_id.eq.${activeCharacterId},character_id.is.null`)
-      }
-
-      const { data: dataByEmail, error: errorByEmail } = await queryByEmail
-
-      console.log("[v0] loadPendingInvitations: Search by email result:", { data: dataByEmail?.length || 0, error: errorByEmail })
-
-      if (errorById || errorByEmail) {
-        const error = errorById || errorByEmail
-        console.error("[v0] Error loading invitations:", error)
-        // Si es un error de permisos, mostrar mensaje más claro
-        if (error?.code === '42501' || error?.message?.includes('permission denied')) {
-          console.error("[v0] ❌ PERMISSION DENIED - RLS policies need to be fixed!")
-          console.error("[v0] Please run script: 049_fix_campaign_invitations_rls.sql")
-          setError("Error loading invitations: Permission denied. Please check RLS policies.")
-        }
-        setPendingInvitations([])
-        return
-      }
-
-      // Combinar resultados y eliminar duplicados
-      const allInvitations = [...(dataById || []), ...(dataByEmail || [])]
-      const uniqueInvitations = allInvitations.filter(
-        (inv, index, self) => index === self.findIndex((i) => i.id === inv.id)
-      )
-
-      console.log("[v0] loadPendingInvitations: Combined invitations:", uniqueInvitations.length)
-
-      const { data, error } = { 
-        data: uniqueInvitations.sort((a, b) => 
-          new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-        ), 
-        error: null 
-      }
-
-      if (error) throw error
-
-      if (!data || data.length === 0) {
-        console.log("[v0] loadPendingInvitations: No invitations found")
-        setPendingInvitations([])
-        return
-      }
-
-      console.log("[v0] loadPendingInvitations: Found", data.length, "invitations")
-
-      // Obtener información de campañas e invitadores
-      const campaignIds = [...new Set(data.map((inv: any) => inv.campaign_id))]
-      const inviterIds = [...new Set(data.map((inv: any) => inv.inviter_id))]
-
-      console.log("[v0] loadPendingInvitations: Fetching campaign data for IDs:", campaignIds)
-      console.log("[v0] loadPendingInvitations: Fetching profile data for IDs:", inviterIds)
-
-      const [campaignsResult, profilesResult] = await Promise.all([
-        supabase
-          .from("campaigns")
-          .select("id, name")
-          .in("id", campaignIds),
-        supabase
-          .from("profiles")
-          .select("id, display_name")
-          .in("id", inviterIds),
-      ])
-
-      console.log("[v0] loadPendingInvitations: Campaigns query result:", {
-        data: campaignsResult.data?.length || 0,
-        error: campaignsResult.error,
-        campaignIds: campaignsResult.data?.map((c: any) => ({ id: c.id, name: c.name }))
-      })
-
-      console.log("[v0] loadPendingInvitations: Profiles query result:", {
-        data: profilesResult.data?.length || 0,
-        error: profilesResult.error,
-        profileIds: profilesResult.data?.map((p: any) => ({ id: p.id, name: p.display_name }))
-      })
-
-      // Si hay errores, loguearlos pero continuar
-      if (campaignsResult.error) {
-        console.error("[v0] Error fetching campaigns:", campaignsResult.error)
-        if (campaignsResult.error.code === '42501' || campaignsResult.error.message?.includes('permission denied')) {
-          console.error("[v0] ❌ Permission denied for campaigns - RLS policy may be blocking access")
-        }
-      }
-
-      if (profilesResult.error) {
-        console.error("[v0] Error fetching profiles:", profilesResult.error)
-        if (profilesResult.error.code === '42501' || profilesResult.error.message?.includes('permission denied')) {
-          console.error("[v0] ❌ Permission denied for profiles - RLS policy may be blocking access")
-        }
-      }
-
-      const invitations = data.map((inv: any) => {
-        const campaign = campaignsResult.data?.find((c: any) => c.id === inv.campaign_id)
-        const profile = profilesResult.data?.find((p: any) => p.id === inv.inviter_id)
-        
-        console.log("[v0] Mapping invitation:", {
-          invitationId: inv.id,
-          campaignId: inv.campaign_id,
-          campaignFound: !!campaign,
-          campaignName: campaign?.name,
-          inviterId: inv.inviter_id,
-          profileFound: !!profile,
-          profileName: profile?.display_name
-        })
-
-        return {
-          ...inv,
-          campaign_name: campaign?.name || "Unknown Campaign",
-          inviter_name: profile?.display_name || "Unknown",
-        }
-      })
-
-      setPendingInvitations(invitations)
-      console.log("[v0] loadPendingInvitations: Successfully loaded", invitations.length, "invitations")
-    } catch (err: any) {
-      console.error("[v0] Error loading pending invitations:", err)
-      setPendingInvitations([])
-    }
-  }
-
-  const searchUsers = async (query: string) => {
-    if (!query.trim() || query.length < 2) {
-      setSearchResults([])
-      return
-    }
-
-    try {
-      setIsSearching(true)
-      // Buscar usuarios por email en auth.users (necesitamos usar una función o RPC)
-      // Alternativamente, buscar en profiles usando display_name o email si está disponible
-      // Por ahora, usaremos una búsqueda simple que el usuario ingrese el email completo
-      setSearchResults([])
-    } catch (err: any) {
-      console.error("[v0] Error searching users:", err)
-      setError(t.campaigns.searchError || "Error searching users")
-    } finally {
-      setIsSearching(false)
-    }
-  }
-
-  const handleSendInvitation = async () => {
-    if (!user || !selectedCampaign) return
-
-    try {
-      setError("")
-      setSuccess("")
-
-      let inviteeId: string | null = null
-      let inviteeEmail: string = ""
-      let characterId: string | null = null
-
-      if (inviteType === "email") {
-        // Invitación por email
-        const email = inviteEmail.trim().toLowerCase()
-
-        // Validar formato de email básico
-        if (!email.includes("@") || !email.includes(".")) {
-          setError(t.campaigns.invalidEmail || "Invalid email format")
-          return
-        }
-
-        inviteeEmail = email
-
-        // Verificar que no está invitándose a sí mismo
-        const { data: currentUser } = await supabase.auth.getUser()
-        if (currentUser?.user?.email?.toLowerCase() === email) {
-          setError(t.campaigns.cannotInviteYourself || "You cannot invite yourself")
-          return
-        }
-
-        // Verificar si ya hay invitación pendiente para este email (sin character_id específico)
-        const { data: existingInvitation } = await supabase
-          .from("campaign_invitations")
-          .select("id")
-          .eq("campaign_id", selectedCampaign.id)
-          .eq("invitee_email", email)
-          .is("character_id", null)
-          .eq("status", "pending")
-          .maybeSingle()
-
-        if (existingInvitation) {
-          setError(t.campaigns.invitationAlreadySent || "Invitation already sent to this email")
-          return
-        }
-      } else {
-        // Invitación por personaje específico
-        if (!selectedInviteCharacterId) {
-          setError(t.campaigns.selectCharacterToInvite || "Please select a character to invite")
-          return
-        }
-
-        // También necesitamos el email para invitaciones por personaje
-        const email = inviteEmail.trim().toLowerCase()
-        if (!email.includes("@") || !email.includes(".")) {
-          setError(t.campaigns.invalidEmail || "Invalid email format. Please provide the user's email.")
-          return
-        }
-
-        // Obtener información del personaje
-        const { data: character, error: charError } = await supabase
-          .from("characters")
-          .select("id, user_id, name")
-          .eq("id", selectedInviteCharacterId)
-          .single()
-
-        if (charError || !character) {
-          setError(t.campaigns.characterNotFound || "Character not found")
-          return
-        }
-
-        // Verificar que no está invitándose a sí mismo
-        if (character.user_id === user.id) {
-          setError(t.campaigns.cannotInviteYourself || "You cannot invite your own character")
-          return
-        }
-
-        characterId = character.id
-        inviteeId = character.user_id
-        inviteeEmail = email
-
-        // Verificar si ya hay invitación pendiente para este personaje
-        const { data: existingInvitation } = await supabase
-          .from("campaign_invitations")
-          .select("id")
-          .eq("campaign_id", selectedCampaign.id)
-          .eq("character_id", characterId)
-          .eq("status", "pending")
-          .maybeSingle()
-
-        if (existingInvitation) {
-          setError(t.campaigns.invitationAlreadySent || "Invitation already sent to this character")
-          return
-        }
-      }
-
-      // Crear invitación
-      const { error: inviteError } = await supabase
-        .from("campaign_invitations")
-        .insert({
-          campaign_id: selectedCampaign.id,
-          inviter_id: user.id,
-          invitee_id: inviteeId || null,
-          invitee_email: inviteeEmail,
-          character_id: characterId,
-          message: inviteMessage.trim() || null,
-        })
-
-      if (inviteError) {
-        console.error("[v0] Error creating invitation:", inviteError)
-        throw inviteError
-      }
-
-      setSuccess(t.campaigns.invitationSent || "Invitation sent successfully!")
-      setInviteEmail("")
-      setInviteMessage("")
-      setInviteType("email")
-      setSelectedInviteCharacterId("")
-      setIsInviteDialogOpen(false)
-      loadPendingInvitations()
-    } catch (err: any) {
-      console.error("[v0] Error sending invitation:", err)
-      setError(err?.message || t.campaigns.invitationError || "Failed to send invitation")
-    }
-  }
-
-  const handleAcceptInvitation = async (invitationId: string) => {
-    if (!user) return
-
-    try {
-      setError("")
-      setSuccess("")
-
-      // Obtener la invitación
-      const { data: invitation, error: fetchError } = await supabase
-        .from("campaign_invitations")
-        .select("*")
-        .eq("id", invitationId)
-        .eq("status", "pending")
-        .single()
-
-      if (fetchError || !invitation) {
-        setError(t.campaigns.invitationNotFound || "Invitation not found or already processed")
-        return
-      }
-
-      // Verificar que el usuario coincide (por ID o email)
-      const { data: userData } = await supabase.auth.getUser()
-      const userEmail = userData?.user?.email?.toLowerCase()
-
-      if (invitation.invitee_id && invitation.invitee_id !== user.id) {
-        setError(t.campaigns.invitationNotFound || "This invitation is not for you")
-        return
-      }
-
-      if (invitation.invitee_email && invitation.invitee_email.toLowerCase() !== userEmail) {
-        setError(t.campaigns.invitationNotFound || "This invitation is not for your email")
-        return
-      }
-
-      // Si la invitación tiene character_id, validar que coincida con el personaje activo
-      if (invitation.character_id) {
-        if (!activeCharacterId) {
-          setError(t.campaigns.invitationRequiresCharacter || "This invitation is for a specific character. Please select that character first.")
-          return
-        }
-        if (invitation.character_id !== activeCharacterId) {
-          setError(t.campaigns.invitationWrongCharacter || "This invitation is for a different character. Please select the correct character.")
-          return
-        }
-      }
-
-      // Si no hay personaje activo, no se puede aceptar (necesitamos character_id)
-      if (!activeCharacterId) {
-        setError(t.campaigns.selectCharacterFirst || "Please select a character first to accept the invitation.")
-        return
-      }
-
-      // Verificar que no es ya miembro con este personaje
-      const { data: existingMember } = await supabase
-        .from("campaign_members")
-        .select("id")
-        .eq("campaign_id", invitation.campaign_id)
-        .eq("user_id", user.id)
-        .eq("character_id", activeCharacterId)
-        .maybeSingle()
-
-      if (existingMember) {
-        // Ya es miembro con este personaje, solo marcar invitación como aceptada
-        await supabase
-          .from("campaign_invitations")
-          .update({ status: "accepted", invitee_id: user.id })
-          .eq("id", invitationId)
-        
-        setSuccess(t.campaigns.invitationAccepted || "Invitation accepted! You are already a member with this character.")
-        loadPendingInvitations()
-        return
-      }
-
-      // Agregar como miembro con el personaje activo
-      const { error: memberError } = await supabase
-        .from("campaign_members")
-        .insert({
-          campaign_id: invitation.campaign_id,
-          user_id: user.id,
-          character_id: activeCharacterId,
-          role: "player",
-        })
-
-      if (memberError) throw memberError
-
-      // Marcar invitación como aceptada y actualizar invitee_id si estaba vacío
-      await supabase
-        .from("campaign_invitations")
-        .update({ status: "accepted", invitee_id: user.id })
-        .eq("id", invitationId)
-
-      setSuccess(t.campaigns.invitationAccepted || "Invitation accepted! You are now a member.")
-      loadPendingInvitations()
-      loadCampaigns()
-      loadAllAvailableCampaigns()
-    } catch (err: any) {
-      console.error("[v0] Error accepting invitation:", err)
-      setError(err?.message || t.campaigns.invitationError || "Failed to accept invitation")
-    }
-  }
-
-  const handleRejectInvitation = async (invitationId: string) => {
-    if (!user) return
-
-    try {
-      setError("")
-      setSuccess("")
-
-      const { error } = await supabase
-        .from("campaign_invitations")
-        .update({ status: "rejected" })
-        .eq("id", invitationId)
-        .eq("invitee_id", user.id)
-
-      if (error) throw error
-
-      setSuccess(t.campaigns.invitationRejected || "Invitation rejected")
-      loadPendingInvitations()
-    } catch (err: any) {
-      console.error("[v0] Error rejecting invitation:", err)
-      setError(err?.message || t.campaigns.invitationError || "Failed to reject invitation")
-    }
-  }
-
   const isGM = (campaign: Campaign) => campaign.is_gm === true || campaign.role === "game_master"
 
   if (loading) {
@@ -1084,76 +539,6 @@ export function Campaigns({ language }: CampaignsProps) {
         <Alert className="mb-4 bg-green-50 text-green-900 border-green-200">
           <AlertDescription>{success}</AlertDescription>
         </Alert>
-      )}
-
-      {/* Buzón de Invitaciones - Destacado fuera de las pestañas */}
-      {pendingInvitations.length > 0 && (
-        <Card className="border-2 border-primary bg-primary/5 mb-6">
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Mail className="h-5 w-5 text-primary" />
-                <CardTitle className="text-lg">
-                  {t.campaigns.pendingInvitations || "Pending Invitations"}
-                </CardTitle>
-                <Badge variant="default" className="ml-2">
-                  {pendingInvitations.length}
-                </Badge>
-              </div>
-            </div>
-            <CardDescription>
-              {t.campaigns.invitationsDescription || "You have pending campaign invitations"}
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              {pendingInvitations.map((invitation) => (
-                <Card key={invitation.id} className="border border-primary/20">
-                  <CardContent className="pt-4">
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-2">
-                          <CardTitle className="text-base">{invitation.campaign_name}</CardTitle>
-                          <Badge variant="outline">
-                            <Mail className="h-3 w-3 mr-1" />
-                            {t.campaigns.invitation || "Invitation"}
-                          </Badge>
-                        </div>
-                        <CardDescription className="mb-2">
-                          {t.campaigns.invitedBy || "Invited by"}: <strong>{invitation.inviter_name}</strong>
-                        </CardDescription>
-                        {invitation.message && (
-                          <p className="text-sm text-muted-foreground mb-2 italic">"{invitation.message}"</p>
-                        )}
-                        <p className="text-xs text-muted-foreground">
-                          {new Date(invitation.created_at).toLocaleDateString()}
-                        </p>
-                      </div>
-                      <div className="flex gap-2 ml-4">
-                        <Button
-                          variant="default"
-                          size="sm"
-                          onClick={() => handleAcceptInvitation(invitation.id)}
-                        >
-                          <Check className="h-4 w-4 mr-2" />
-                          {t.campaigns.accept || "Accept"}
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleRejectInvitation(invitation.id)}
-                        >
-                          <X className="h-4 w-4 mr-2" />
-                          {t.campaigns.reject || "Reject"}
-                        </Button>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
       )}
 
       <Tabs defaultValue="gm" className="w-full">
@@ -1394,35 +779,19 @@ export function Campaigns({ language }: CampaignsProps) {
                 </div>
 
                 {selectedCampaign.is_gm && (
-                  <>
-                    <div>
-                      <h4 className="font-semibold mb-2">{t.campaigns.inviteCode || "Invite Code"}</h4>
-                      <div className="flex gap-2">
-                        <Input value={selectedCampaign.invite_code || "N/A"} readOnly />
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleCopyInviteCode(selectedCampaign.invite_code)}
-                        >
-                          <Copy className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </div>
-                    <div>
-                      <h4 className="font-semibold mb-2">{t.campaigns.invitePlayer || "Invite Players"}</h4>
+                  <div>
+                    <h4 className="font-semibold mb-2">{t.campaigns.inviteCode || "Invite Code"}</h4>
+                    <div className="flex gap-2">
+                      <Input value={selectedCampaign.invite_code || "N/A"} readOnly />
                       <Button
-                        variant="default"
-                        className="w-full"
-                        onClick={() => setIsInviteDialogOpen(true)}
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleCopyInviteCode(selectedCampaign.invite_code)}
                       >
-                        <UserPlus className="h-4 w-4 mr-2" />
-                        {t.campaigns.invitePlayer || "Invite Player"}
+                        <Copy className="h-4 w-4" />
                       </Button>
-                      <p className="text-xs text-muted-foreground mt-2">
-                        {t.campaigns.invitePlayerHint || "Send an invitation by email to add players to this campaign"}
-                      </p>
                     </div>
-                  </>
+                  </div>
                 )}
 
                 <Button onClick={() => handleLeaveCampaign(selectedCampaign.id)} variant="outline" className="w-full">
@@ -1434,14 +803,6 @@ export function Campaigns({ language }: CampaignsProps) {
                 <TabsContent value="members" className="space-y-4">
                   <div className="flex justify-between items-center mb-4">
                     <h4 className="font-semibold">{t.campaigns.members || "Members"}</h4>
-                    <Button
-                      variant="default"
-                      size="sm"
-                      onClick={() => setIsInviteDialogOpen(true)}
-                    >
-                      <UserPlus className="h-4 w-4 mr-2" />
-                      {t.campaigns.invitePlayer || "Invite Player"}
-                    </Button>
                   </div>
                   {members.length === 0 ? (
                     <p>{t.campaigns.noMembers || "No members in this campaign"}</p>
@@ -1485,111 +846,6 @@ export function Campaigns({ language }: CampaignsProps) {
           </DialogContent>
         </Dialog>
       )}
-
-      {/* Invite Player Dialog */}
-      <Dialog open={isInviteDialogOpen} onOpenChange={setIsInviteDialogOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>{t.campaigns.invitePlayer || "Invite Player"}</DialogTitle>
-            <DialogDescription>
-              {t.campaigns.invitePlayerDescription || "Invite a player by email or select a specific character"}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4">
-            {/* Tipo de invitación */}
-            <div>
-              <Label>{t.campaigns.inviteType || "Invitation Type"}</Label>
-              <Tabs value={inviteType} onValueChange={(value) => setInviteType(value as "email" | "character")} className="mt-2">
-                <TabsList className="grid w-full grid-cols-2">
-                  <TabsTrigger value="email">
-                    <Mail className="h-4 w-4 mr-2" />
-                    {t.campaigns.byEmail || "By Email"}
-                  </TabsTrigger>
-                  <TabsTrigger value="character">
-                    <UserPlus className="h-4 w-4 mr-2" />
-                    {t.campaigns.byCharacter || "By Character"}
-                  </TabsTrigger>
-                </TabsList>
-              </Tabs>
-            </div>
-
-            {/* Contenido según el tipo */}
-            {inviteType === "email" ? (
-              <div>
-                <Label htmlFor="inviteEmail">{t.campaigns.email || "Email Address"}</Label>
-                <Input
-                  id="inviteEmail"
-                  type="email"
-                  value={inviteEmail}
-                  onChange={(e) => setInviteEmail(e.target.value)}
-                  placeholder={t.campaigns.emailPlaceholder || "Enter email address"}
-                  className="mt-1"
-                />
-                <p className="text-xs text-muted-foreground mt-1">
-                  {t.campaigns.inviteEmailDescription || "Enter the email address of the user you want to invite"}
-                </p>
-              </div>
-            ) : (
-              <>
-                <div>
-                  <Label htmlFor="inviteEmail">{t.campaigns.email || "Email Address"}</Label>
-                  <Input
-                    id="inviteEmail"
-                    type="email"
-                    value={inviteEmail}
-                    onChange={(e) => setInviteEmail(e.target.value)}
-                    placeholder={t.campaigns.emailPlaceholder || "Enter email address"}
-                    className="mt-1"
-                  />
-                  <p className="text-xs text-muted-foreground mt-1">
-                    {t.campaigns.inviteEmailForCharacter || "Enter the email of the user who owns the character"}
-                  </p>
-                </div>
-                <div>
-                  <Label htmlFor="inviteCharacter">{t.campaigns.selectCharacter || "Select Character"}</Label>
-                  <Input
-                    id="inviteCharacter"
-                    type="text"
-                    value={selectedInviteCharacterId}
-                    onChange={(e) => setSelectedInviteCharacterId(e.target.value)}
-                    placeholder={t.campaigns.characterIdPlaceholder || "Enter character ID (UUID)"}
-                    className="mt-1"
-                  />
-                  <p className="text-xs text-muted-foreground mt-1">
-                    {t.campaigns.inviteCharacterDescription || "Enter the character ID to invite a specific character. The user will need to accept with that character."}
-                  </p>
-                </div>
-              </>
-            )}
-
-            {/* Mensaje opcional */}
-            <div>
-              <Label htmlFor="inviteMessage">{t.campaigns.message || "Message (Optional)"}</Label>
-              <Textarea
-                id="inviteMessage"
-                value={inviteMessage}
-                onChange={(e) => setInviteMessage(e.target.value)}
-                placeholder={t.campaigns.messagePlaceholder || "Add a personal message..."}
-                rows={3}
-                className="mt-1"
-              />
-            </div>
-
-            <Button
-              onClick={handleSendInvitation}
-              className="w-full"
-              disabled={
-                inviteType === "email" 
-                  ? !inviteEmail.trim() 
-                  : !inviteEmail.trim() || !selectedInviteCharacterId.trim()
-              }
-            >
-              <Mail className="h-4 w-4 mr-2" />
-              {t.campaigns.sendInvitation || "Send Invitation"}
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
     </div>
   )
 }

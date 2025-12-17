@@ -146,7 +146,7 @@ export function LocationsMap({ language }: LocationsMapProps) {
       setShops([])
       setStandaloneNpcs([])
     }
-  }, [user])
+  }, [user, activeCharacterId]) // Recargar campañas cuando cambia el personaje activo
 
   useEffect(() => {
     if (selectedCampaignId && user) {
@@ -274,10 +274,10 @@ export function LocationsMap({ language }: LocationsMapProps) {
 
     try {
       // Separar consultas en lugar de JOIN para mayor seguridad
-      // 1. Obtener campaign_members del usuario
+      // 1. Obtener campaign_members del usuario, incluyendo character_id
       const { data: memberData, error: memberError } = await supabase
         .from("campaign_members")
-        .select("campaign_id, role")
+        .select("campaign_id, role, character_id")
         .eq("user_id", user.id)
 
       if (memberError) {
@@ -296,10 +296,34 @@ export function LocationsMap({ language }: LocationsMapProps) {
         return
       }
 
-      // 2. Extraer campaign_ids únicos
-      const campaignIds = [...new Set(memberData.map((m) => m.campaign_id))]
+      // 2. Filtrar memberData según el personaje activo
+      // - Si hay activeCharacterId: solo incluir campañas GM (sin character_id) y campañas player con character_id coincidente
+      // - Si no hay activeCharacterId: incluir todas las campañas del usuario
+      let filteredMemberData = memberData
+      if (activeCharacterId) {
+        filteredMemberData = memberData.filter((member) => {
+          // Incluir campañas GM (role = "game_master", character_id puede ser null)
+          if (member.role === "game_master") {
+            return true
+          }
+          // Incluir campañas player solo si character_id coincide con activeCharacterId
+          if (member.role === "player") {
+            return member.character_id === activeCharacterId
+          }
+          return false
+        })
+      }
 
-      // 3. Obtener campaigns por separado usando los IDs validados
+      if (filteredMemberData.length === 0) {
+        setCampaigns([])
+        setSelectedCampaignId("")
+        return
+      }
+
+      // 3. Extraer campaign_ids únicos
+      const campaignIds = [...new Set(filteredMemberData.map((m) => m.campaign_id))]
+
+      // 4. Obtener campaigns por separado usando los IDs validados
       const { data: campaignsData, error: campaignsError } = await supabase
         .from("campaigns")
         .select("id, name")
@@ -315,10 +339,10 @@ export function LocationsMap({ language }: LocationsMapProps) {
         return
       }
 
-      // 4. Crear mapeo de roles: cada campaña puede tener múltiples roles (GM y/o jugador)
+      // 5. Crear mapeo de roles: cada campaña puede tener múltiples roles (GM y/o jugador)
       // En lugar de priorizar "game_master", crear entradas separadas para cada rol
       const campaignRoleMap = new Map<string, Array<"game_master" | "player">>()
-      memberData.forEach((member) => {
+      filteredMemberData.forEach((member) => {
         const existing = campaignRoleMap.get(member.campaign_id) || []
         const role = member.role as "game_master" | "player"
         // Agregar el rol si no existe ya
@@ -328,7 +352,7 @@ export function LocationsMap({ language }: LocationsMapProps) {
         }
       })
 
-      // 5. Crear entradas separadas para cada rol
+      // 6. Crear entradas separadas para cada rol
       // Si un usuario es GM y jugador en la misma campaña, se crearán DOS entradas
       const validCampaigns: CampaignEntry[] = []
       campaignsData.forEach((campaign) => {

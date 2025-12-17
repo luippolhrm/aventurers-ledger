@@ -26,9 +26,10 @@ type LocationType = (typeof LOCATION_TYPE_OPTIONS)[number]
 type ShopType = (typeof SHOP_TYPE_OPTIONS)[number]
 
 interface CampaignEntry {
-  id: string
+  id: string // ID real de la campaña
   name: string
   role: "game_master" | "player"
+  displayId: string // ID único para el selector (combina id + role)
 }
 
 interface LocationRow {
@@ -121,25 +122,45 @@ export function LocationsMap({ language }: LocationsMapProps) {
   const [editingStandaloneNpc, setEditingStandaloneNpc] = useState<StandaloneNpcRow | null>(null)
   const [activeTab, setActiveTab] = useState<"locations" | "shops" | "npcs">("locations")
 
-  const activeCampaign = useMemo(
-    () => campaigns.find((campaign) => campaign.id === selectedCampaignId),
-    [campaigns, selectedCampaignId],
-  )
+  // No filtrar duplicados - queremos mantener entradas separadas para cada rol
+  // Si un usuario es GM y jugador, ambas entradas deben aparecer
+  const campaignsList = useMemo(() => campaigns, [campaigns])
+
+  const activeCampaign = useMemo(() => {
+    // selectedCampaignId ahora puede ser un displayId (id_role) o el id real
+    // Buscar por displayId primero, luego por id
+    return campaignsList.find(
+      (campaign) => campaign.displayId === selectedCampaignId || campaign.id === selectedCampaignId
+    )
+  }, [campaignsList, selectedCampaignId])
   const isGm = activeCampaign?.role === "game_master"
 
   useEffect(() => {
     if (user) {
       loadCampaigns()
+    } else {
+      // Limpiar estado si no hay usuario
+      setCampaigns([])
+      setSelectedCampaignId("")
+      setLocations([])
+      setShops([])
+      setStandaloneNpcs([])
     }
   }, [user])
 
   useEffect(() => {
-    if (selectedCampaignId) {
-      loadLocations()
+    if (selectedCampaignId && user) {
+      // Validar acceso antes de cargar datos
+      validateAndLoadCampaignData()
+    } else {
+      // Limpiar estado si no hay campaña seleccionada
+      setLocations([])
       setSelectedLocationId("")
+      setShops([])
       setSelectedShopId("")
+      setStandaloneNpcs([])
     }
-  }, [selectedCampaignId])
+  }, [selectedCampaignId, user])
 
   useEffect(() => {
     if (selectedLocationId) {
@@ -153,66 +174,274 @@ export function LocationsMap({ language }: LocationsMapProps) {
   }, [selectedLocationId])
 
   useEffect(() => {
-    if (selectedShopId) {
+    // Solo cargar shop NPCs cuando se está en la pestaña NPCs y hay un shop seleccionado
+    // Esto evita cargar datos innecesarios cuando el usuario solo quiere ver la tienda
+    if (selectedShopId && activeTab === "npcs") {
       loadShopNpcs()
     } else {
-      setShopNpcs([])
+      // Limpiar solo si no hay shop seleccionado o si cambiamos de pestaña
+      if (!selectedShopId) {
+        setShopNpcs([])
+      }
+      // Si hay shop seleccionado pero no estamos en la pestaña NPCs, mantener los datos
+      // (no limpiar para evitar recargas innecesarias si el usuario vuelve a la pestaña)
     }
-  }, [selectedShopId])
+  }, [selectedShopId, activeTab])
 
-  useEffect(() => {
-    if (selectedCampaignId) {
-      loadStandaloneNpcs()
-    } else {
-      setStandaloneNpcs([])
+  // Función helper para extraer el ID real de la campaña del selectedCampaignId
+  // selectedCampaignId puede ser un displayId (formato: campaignId_role) o el ID real
+  const getRealCampaignId = (campaignIdOrDisplayId: string): string => {
+    if (!campaignIdOrDisplayId) return ""
+    // Si contiene "_", es un displayId, extraer el ID real
+    if (campaignIdOrDisplayId.includes("_")) {
+      return campaignIdOrDisplayId.split("_")[0]
     }
-  }, [selectedCampaignId])
+    // Si no contiene "_", es el ID real
+    return campaignIdOrDisplayId
+  }
+
+  // Función helper para validar acceso a una campaña
+  const validateCampaignAccess = async (campaignId: string): Promise<{ hasAccess: boolean; role?: "game_master" | "player" }> => {
+    if (!user || !campaignId) {
+      return { hasAccess: false }
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from("campaign_members")
+        .select("role")
+        .eq("campaign_id", campaignId)
+        .eq("user_id", user.id)
+        .maybeSingle()
+
+      if (error) {
+        console.error("[v0] LocationsMap: Error validating campaign access:", error)
+        return { hasAccess: false }
+      }
+
+      if (data) {
+        return { hasAccess: true, role: data.role as "game_master" | "player" }
+      }
+
+      return { hasAccess: false }
+    } catch (err) {
+      console.error("[v0] LocationsMap: Exception validating campaign access:", err)
+      return { hasAccess: false }
+    }
+  }
+
+  // Función para validar y cargar datos de la campaña
+  const validateAndLoadCampaignData = async () => {
+    if (!selectedCampaignId || !user) return
+
+    // Verificar primero si la campaña está en la lista de campaigns cargadas
+    // Si está, confiar en que es válida (ya fue filtrada por user_id en loadCampaigns)
+    const campaignExists = campaigns.some((c) => c.displayId === selectedCampaignId || c.id === selectedCampaignId)
+    if (campaignExists) {
+      // Cargar datos directamente sin validar (ya sabemos que es válida)
+      await Promise.all([loadLocations(), loadStandaloneNpcs()])
+      return
+    }
+
+    // Solo validar si la campaña NO está en la lista (caso edge - no debería pasar normalmente)
+    const realCampaignId = getRealCampaignId(selectedCampaignId)
+    const access = await validateCampaignAccess(realCampaignId)
+    
+    if (!access.hasAccess) {
+      console.error("[v0] LocationsMap: User does not have access to campaign:", realCampaignId)
+      toast({
+        title: t.inventory?.error || "Error",
+        description: "No tienes acceso a esta campaña",
+        variant: "destructive",
+      })
+      // Limpiar estado y resetear campaña seleccionada
+      setSelectedCampaignId("")
+      setLocations([])
+      setShops([])
+      setStandaloneNpcs([])
+      return
+    }
+
+    // Si tiene acceso, cargar los datos
+    await Promise.all([loadLocations(), loadStandaloneNpcs()])
+  }
 
   const loadCampaigns = async () => {
+    if (!user) {
+      setCampaigns([])
+      return
+    }
+
+    try {
+      // Separar consultas en lugar de JOIN para mayor seguridad
+      // 1. Obtener campaign_members del usuario
+      const { data: memberData, error: memberError } = await supabase
+        .from("campaign_members")
+        .select("campaign_id, role")
+        .eq("user_id", user.id)
+
+      if (memberError) {
+        console.error("[v0] LocationsMap: Error loading campaign members:", memberError)
+        toast({
+          title: t.inventory?.error || "Error",
+          description: memberError.message,
+          variant: "destructive",
+        })
+        return
+      }
+
+      if (!memberData || memberData.length === 0) {
+        setCampaigns([])
+        setSelectedCampaignId("")
+        return
+      }
+
+      // 2. Extraer campaign_ids únicos
+      const campaignIds = [...new Set(memberData.map((m) => m.campaign_id))]
+
+      // 3. Obtener campaigns por separado usando los IDs validados
+      const { data: campaignsData, error: campaignsError } = await supabase
+        .from("campaigns")
+        .select("id, name")
+        .in("id", campaignIds)
+
+      if (campaignsError) {
+        console.error("[v0] LocationsMap: Error loading campaigns:", campaignsError)
+        toast({
+          title: t.inventory?.error || "Error",
+          description: campaignsError.message,
+          variant: "destructive",
+        })
+        return
+      }
+
+      // 4. Crear mapeo de roles: cada campaña puede tener múltiples roles (GM y/o jugador)
+      // En lugar de priorizar "game_master", crear entradas separadas para cada rol
+      const campaignRoleMap = new Map<string, Array<"game_master" | "player">>()
+      memberData.forEach((member) => {
+        const existing = campaignRoleMap.get(member.campaign_id) || []
+        const role = member.role as "game_master" | "player"
+        // Agregar el rol si no existe ya
+        if (!existing.includes(role)) {
+          existing.push(role)
+          campaignRoleMap.set(member.campaign_id, existing)
+        }
+      })
+
+      // 5. Crear entradas separadas para cada rol
+      // Si un usuario es GM y jugador en la misma campaña, se crearán DOS entradas
+      const validCampaigns: CampaignEntry[] = []
+      campaignsData.forEach((campaign) => {
+        const roles = campaignRoleMap.get(campaign.id) || []
+        // Si la campaña no tiene roles, no la incluimos
+        if (roles.length === 0) return
+
+        // Crear una entrada para cada rol que el usuario tiene en esta campaña
+        roles.forEach((role) => {
+          validCampaigns.push({
+            id: campaign.id, // ID real de la campaña (para consultas)
+            name: campaign.name,
+            role: role,
+            displayId: `${campaign.id}_${role}`, // ID único para el selector
+          })
+        })
+      })
+
+      // No eliminar duplicados aquí porque queremos mantener entradas separadas para cada rol
+      // Si hay dos entradas con el mismo ID pero diferentes roles, ambas son válidas
+
+      setCampaigns(validCampaigns)
+      
+      // Si no hay campaña seleccionada y hay campañas disponibles, seleccionar la primera
+      // Priorizar entrada GM si existe, sino la primera disponible
+      if (!selectedCampaignId && validCampaigns.length > 0) {
+        const gmCampaign = validCampaigns.find((c) => c.role === "game_master")
+        const campaignToSelect = gmCampaign || validCampaigns[0]
+        setSelectedCampaignId(campaignToSelect.displayId)
+      }
+    } catch (err) {
+      console.error("[v0] LocationsMap: Exception loading campaigns:", err)
+      toast({
+        title: t.inventory?.error || "Error",
+        description: err instanceof Error ? err.message : "Error al cargar campañas",
+        variant: "destructive",
+      })
+    }
+  }
+
+  const loadLocations = async () => {
+    if (!selectedCampaignId || !user) {
+      setLocations([])
+      return
+    }
+
+    // Extraer el ID real de la campaña
+    const realCampaignId = getRealCampaignId(selectedCampaignId)
+
+    // Verificar si la campaña está en la lista antes de validar
+    // Si está en la lista, confiar en que es válida (ya fue filtrada por user_id)
+    const campaignExists = campaigns.some((c) => c.displayId === selectedCampaignId || c.id === selectedCampaignId)
+    if (!campaignExists) {
+      // Solo validar si no está en la lista (caso edge)
+      const access = await validateCampaignAccess(realCampaignId)
+      if (!access.hasAccess) {
+        console.error("[v0] LocationsMap: Cannot load locations - no access to campaign:", realCampaignId)
+        setLocations([])
+        return
+      }
+    }
+
     const { data, error } = await supabase
-      .from("campaign_members")
-      .select("campaign_id, role, campaigns(id, name)")
-      .eq("user_id", user?.id)
+      .from("locations")
+      .select("*")
+      .eq("campaign_id", realCampaignId)
+      .order("created_at", { ascending: false })
 
     if (error) {
+      console.error("[v0] LocationsMap: Error loading locations:", error)
       toast({
         title: t.inventory?.error || "Error",
         description: error.message,
         variant: "destructive",
       })
+      setLocations([])
       return
     }
 
-    const mapped: CampaignEntry[] = (data || [])
-      .map((entry: { campaigns?: { id: string; name: string }; role: "game_master" | "player" }) => ({
-        id: entry.campaigns?.id,
-        name: entry.campaigns?.name,
-        role: entry.role,
-      }))
-      .filter((entry: { id?: string }) => entry.id)
-
-    setCampaigns(mapped)
-    if (!selectedCampaignId && mapped.length > 0) {
-      setSelectedCampaignId(mapped[0].id)
-    }
-  }
-
-  const loadLocations = async () => {
-    if (!selectedCampaignId) return
-
-    const { data, error } = await supabase
-      .from("locations")
-      .select("*")
-      .eq("campaign_id", selectedCampaignId)
-      .order("created_at", { ascending: false })
-
-    if (!error && data) {
-      setLocations(data as LocationRow[])
-    }
+    setLocations((data as LocationRow[]) || [])
   }
 
   const loadShops = async () => {
-    if (!selectedLocationId) return
+    if (!selectedLocationId || !user) {
+      setShops([])
+      return
+    }
+
+    // Obtener la location para verificar su campaign_id
+    const { data: locationData, error: locationError } = await supabase
+      .from("locations")
+      .select("campaign_id")
+      .eq("id", selectedLocationId)
+      .maybeSingle()
+
+    if (locationError || !locationData) {
+      console.error("[v0] LocationsMap: Error validating location:", locationError)
+      setShops([])
+      return
+    }
+
+    // Verificar si la campaña de la location está en la lista antes de validar
+    // Si está en la lista, confiar en que es válida (ya fue filtrada por user_id)
+    const campaignExists = campaigns.some((c) => c.id === locationData.campaign_id)
+    if (!campaignExists) {
+      // Solo validar si no está en la lista (caso edge)
+      const access = await validateCampaignAccess(locationData.campaign_id)
+      if (!access.hasAccess) {
+        console.error("[v0] LocationsMap: Cannot load shops - no access to campaign:", locationData.campaign_id)
+        setShops([])
+        return
+      }
+    }
 
     const { data, error } = await supabase
       .from("shops")
@@ -220,13 +449,64 @@ export function LocationsMap({ language }: LocationsMapProps) {
       .eq("location_id", selectedLocationId)
       .order("created_at", { ascending: false })
 
-    if (!error && data) {
-      setShops(data as ShopRow[])
+    if (error) {
+      console.error("[v0] LocationsMap: Error loading shops:", error)
+      toast({
+        title: t.inventory?.error || "Error",
+        description: error.message,
+        variant: "destructive",
+      })
+      setShops([])
+      return
     }
+
+    setShops((data as ShopRow[]) || [])
   }
 
   const loadShopNpcs = async () => {
-    if (!selectedShopId) return
+    if (!selectedShopId || !user) {
+      setShopNpcs([])
+      return
+    }
+
+    // Validar que el shop pertenezca a una location de una campaña del usuario
+    // Primero obtener el shop para verificar su location_id
+    const { data: shopData, error: shopError } = await supabase
+      .from("shops")
+      .select("location_id, locations!inner(campaign_id)")
+      .eq("id", selectedShopId)
+      .maybeSingle()
+
+    if (shopError || !shopData) {
+      console.error("[v0] LocationsMap: Error validating shop:", shopError)
+      setShopNpcs([])
+      return
+    }
+
+    // Obtener campaign_id de la location
+    const location = shopData.locations as { campaign_id: string }
+    if (!location || !location.campaign_id) {
+      console.error("[v0] LocationsMap: Shop location has no campaign_id")
+      setShopNpcs([])
+      return
+    }
+
+    // Verificar si la campaña está en la lista antes de validar
+    // Si está en la lista, confiar en que es válida (ya fue filtrada por user_id)
+    const campaignExists = campaigns.some((c) => {
+      const realId = getRealCampaignId(c.displayId || c.id)
+      return realId === location.campaign_id
+    })
+
+    if (!campaignExists) {
+      // Solo validar si no está en la lista (caso edge)
+      const access = await validateCampaignAccess(location.campaign_id)
+      if (!access.hasAccess) {
+        console.error("[v0] LocationsMap: Cannot load shop NPCs - no access to campaign:", location.campaign_id)
+        setShopNpcs([])
+        return
+      }
+    }
 
     const { data, error } = await supabase
       .from("shop_npcs")
@@ -234,23 +514,60 @@ export function LocationsMap({ language }: LocationsMapProps) {
       .eq("shop_id", selectedShopId)
       .order("created_at", { ascending: false })
 
-    if (!error && data) {
-      setShopNpcs(data as ShopNpcRow[])
+    if (error) {
+      console.error("[v0] LocationsMap: Error loading shop NPCs:", error)
+      toast({
+        title: t.inventory?.error || "Error",
+        description: error.message,
+        variant: "destructive",
+      })
+      setShopNpcs([])
+      return
     }
+
+    setShopNpcs((data as ShopNpcRow[]) || [])
   }
 
   const loadStandaloneNpcs = async () => {
-    if (!selectedCampaignId) return
+    if (!selectedCampaignId || !user) {
+      setStandaloneNpcs([])
+      return
+    }
+
+    // Extraer el ID real de la campaña
+    const realCampaignId = getRealCampaignId(selectedCampaignId)
+
+    // Verificar si la campaña está en la lista antes de validar
+    // Si está en la lista, confiar en que es válida (ya fue filtrada por user_id)
+    const campaignExists = campaigns.some((c) => c.displayId === selectedCampaignId || c.id === selectedCampaignId)
+    if (!campaignExists) {
+      // Solo validar si no está en la lista (caso edge)
+      const access = await validateCampaignAccess(realCampaignId)
+      if (!access.hasAccess) {
+        console.error("[v0] LocationsMap: Cannot load NPCs - no access to campaign:", realCampaignId)
+        setStandaloneNpcs([])
+        return
+      }
+    }
 
     const { data, error } = await supabase
       .from("npcs")
       .select("*")
-      .eq("campaign_id", selectedCampaignId)
+      .eq("campaign_id", realCampaignId)
       .order("created_at", { ascending: false })
 
-    if (!error && data) {
-      setStandaloneNpcs(data as StandaloneNpcRow[])
+    if (error) {
+      console.error("[v0] LocationsMap: Error loading NPCs:", error)
+      toast({
+        title: t.inventory?.error || "Error",
+        description: error.message,
+        variant: "destructive",
+      })
+      setStandaloneNpcs([])
+      return
     }
+
+    setStandaloneNpcs((data as StandaloneNpcRow[]) || [])
   }
 
   const openLocationDialog = (location?: LocationRow) => {
@@ -266,11 +583,14 @@ export function LocationsMap({ language }: LocationsMapProps) {
   const handleSaveLocation = async () => {
     if (!locationForm.name.trim() || !selectedCampaignId) return
 
+    // Extraer el ID real de la campaña
+    const realCampaignId = getRealCampaignId(selectedCampaignId)
+
     const payload = {
       name: locationForm.name.trim(),
       description: locationForm.description || null,
       location_type: locationForm.type,
-      campaign_id: selectedCampaignId,
+      campaign_id: realCampaignId,
     }
 
     if (editingLocation) {
@@ -297,6 +617,16 @@ export function LocationsMap({ language }: LocationsMapProps) {
   }
 
   const openShopDialog = async (shop?: ShopRow) => {
+    // Validación de seguridad: solo los GMs pueden abrir el diálogo de edición/creación
+    if (!isGm) {
+      toast({
+        title: t.inventory?.error || "Error",
+        description: "Solo el Game Master puede crear o editar tiendas",
+        variant: "destructive",
+      })
+      return
+    }
+
     setEditingShop(shop || null)
     
     // If editing, find the assigned NPC
@@ -325,6 +655,16 @@ export function LocationsMap({ language }: LocationsMapProps) {
 
   const handleSaveShop = async () => {
     if (!shopForm.name.trim() || !selectedLocationId) return
+
+    // Validación de seguridad: solo los GMs pueden crear/editar shops
+    if (!isGm) {
+      toast({
+        title: t.inventory?.error || "Error",
+        description: "Solo el Game Master puede crear o editar tiendas",
+        variant: "destructive",
+      })
+      return
+    }
 
     const payload = {
       name: shopForm.name.trim(),
@@ -415,12 +755,15 @@ export function LocationsMap({ language }: LocationsMapProps) {
   const handleSaveStandaloneNpc = async () => {
     if (!npcForm.name.trim() || !selectedCampaignId) return
 
+    // Extraer el ID real de la campaña
+    const realCampaignId = getRealCampaignId(selectedCampaignId)
+
     const payload = {
       name: npcForm.name.trim(),
       title: npcForm.title || null,
       resistances: npcForm.resistances || null,
       story: npcForm.story || null,
-      campaign_id: selectedCampaignId,
+      campaign_id: realCampaignId,
     }
 
     if (editingStandaloneNpc) {
@@ -507,17 +850,41 @@ export function LocationsMap({ language }: LocationsMapProps) {
 
         {/* Campaign Selector */}
         <div className="flex flex-col gap-2">
-          {campaigns.length === 0 ? (
+          {campaignsList.length === 0 ? (
             <p className="text-sm text-muted-foreground">{t.marketplace?.noCampaigns || "Join a campaign to see the map."}</p>
           ) : (
-            <Select value={selectedCampaignId} onValueChange={(value) => setSelectedCampaignId(value)}>
+            <Select
+              value={selectedCampaignId}
+              onValueChange={async (value) => {
+                // Verificar que la campaña esté en la lista
+                // El selector solo muestra campañas de la lista, pero mantener validación por seguridad
+                if (value && user) {
+                  const campaignExists = campaignsList.some((c) => c.displayId === value || c.id === value)
+                  if (!campaignExists) {
+                    // Solo validar si no está en la lista (no debería pasar normalmente)
+                    // Extraer el ID real de la campaña del displayId si es necesario
+                    const campaignId = value.includes("_") ? value.split("_")[0] : value
+                    const access = await validateCampaignAccess(campaignId)
+                    if (!access.hasAccess) {
+                      toast({
+                        title: t.inventory?.error || "Error",
+                        description: "No tienes acceso a esta campaña",
+                        variant: "destructive",
+                      })
+                      return
+                    }
+                  }
+                }
+                setSelectedCampaignId(value)
+              }}
+            >
               <SelectTrigger className="w-full max-w-md">
                 <SelectValue placeholder={t.marketplace?.selectCampaign || "Select a campaign"} />
               </SelectTrigger>
               <SelectContent>
-                {campaigns.map((campaign) => (
-                  <SelectItem key={campaign.id} value={campaign.id}>
-                    {campaign.name} {campaign.role === "game_master" ? "· GM" : ""}
+                {campaignsList.map((campaign) => (
+                  <SelectItem key={campaign.displayId} value={campaign.displayId}>
+                    {campaign.name} {campaign.role === "game_master" ? "· GM" : "· Jugador"}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -682,10 +1049,16 @@ export function LocationsMap({ language }: LocationsMapProps) {
                       <Button
                         variant="outline"
                         className="w-full"
-                        onClick={() => router.push(`/shop-items/${shop.id}`)}
+                        onClick={() => {
+                          const role = activeCampaign?.role || "player"
+                          router.push(`/shop-items/${shop.id}?role=${role}`)
+                        }}
                       >
                         <Package className="w-4 h-4 mr-2" />
-                        {t.marketplace?.manageItems || "Manage Items"}
+                        {isGm 
+                          ? (t.marketplace?.manageItems || "Manage Items")
+                          : (t.marketplace?.viewItems || "View Items")
+                        }
                       </Button>
                     </CardContent>
                   )}

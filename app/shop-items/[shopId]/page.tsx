@@ -88,9 +88,32 @@ export default function ShopItemsPage({ params }: { params: Promise<{ shopId: st
       // Check if user is the GM
       const campaign = shopData.locations.campaigns
       const userIsGm = campaign.game_master_id === user.id
-      setIsGm(userIsGm)
+      
+      // Leer el query parameter de rol si está presente
+      // Usar window.location.search para evitar problemas con useSearchParams hook
+      const urlParams = new URLSearchParams(typeof window !== "undefined" ? window.location.search : "")
+      const roleParam = urlParams.get("role")
+      
+      // Determinar permisos de edición basándose en el query parameter y el rol real del usuario
+      // El acceso se valida por separado (más abajo)
+      let finalIsGm = userIsGm
+      if (roleParam) {
+        if (roleParam === "player") {
+          // Cualquier usuario (GM o player) puede ver como player (solo lectura)
+          // Esto permite que los GMs vean la tienda desde la perspectiva de un jugador
+          finalIsGm = false
+        } else if (roleParam === "game_master") {
+          // Solo permitir modo GM si realmente es GM
+          // Si un player intenta usar ?role=game_master, se mantiene como false
+          finalIsGm = userIsGm
+        }
+        // Si el query parameter tiene un valor inválido, se ignora y se usa el rol por defecto
+      }
+      
+      setIsGm(finalIsGm)
 
-      // If not GM, check if user is at least a campaign member
+      // Validar acceso: si es GM, siempre tiene acceso
+      // Si no es GM, verificar que sea miembro de la campaña
       if (!userIsGm) {
         const { data: memberData, error: memberError } = await supabase
           .from("campaign_members")
@@ -112,7 +135,8 @@ export default function ShopItemsPage({ params }: { params: Promise<{ shopId: st
   }
 
   const handleBack = () => {
-    router.back()
+    // Navegar de vuelta al dashboard con el módulo "map" activo
+    router.push("/dashboard?module=map")
   }
 
   if (isLoading) {

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { DashboardOverview } from "@/components/dashboard-overview"
 import { CurrencyExchangeCard } from "@/components/currency-exchange-card"
 import { CharactersUnified } from "@/components/characters-unified"
@@ -14,8 +14,44 @@ import { useLanguage } from "@/lib/language-context"
 import { Map } from "@/components/map"
 
 export function MainLayout() {
-  const [activeModule, setActiveModule] = useState("welcome")
   const { language, t } = useLanguage()
+  
+  // Leer el módulo del query parameter de la URL
+  const getModuleFromUrl = () => {
+    if (typeof window !== "undefined") {
+      const urlParams = new URLSearchParams(window.location.search)
+      return urlParams.get("module") || "welcome"
+    }
+    return "welcome"
+  }
+  
+  const [activeModule, setActiveModule] = useState(getModuleFromUrl)
+  
+  // Actualizar el módulo activo cuando cambia la URL
+  useEffect(() => {
+    const checkAndUpdateModule = () => {
+      const moduleFromUrl = getModuleFromUrl()
+      if (moduleFromUrl !== activeModule) {
+        setActiveModule(moduleFromUrl)
+      }
+    }
+    
+    // Verificar inmediatamente
+    checkAndUpdateModule()
+    
+    // Escuchar cambios en la URL del navegador (botón back/forward)
+    const handlePopState = () => checkAndUpdateModule()
+    window.addEventListener("popstate", handlePopState)
+    
+    // Verificar periódicamente para capturar cambios programáticos de Next.js
+    // (esto es necesario porque Next.js no siempre dispara eventos cuando usa router.push)
+    const interval = setInterval(checkAndUpdateModule, 200)
+    
+    return () => {
+      window.removeEventListener("popstate", handlePopState)
+      clearInterval(interval)
+    }
+  }, [activeModule])
 
   return (
     <div className="min-h-screen flex">

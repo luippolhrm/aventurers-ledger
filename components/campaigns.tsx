@@ -383,47 +383,70 @@ export function Campaigns({ language }: CampaignsProps) {
       let data: any[] | null = null
       let error: any = null
       
-      // Try RPC function first
+      // Try RPC function first - this is the preferred method
       const rpcResult = await supabase
         .rpc("get_campaign_members", { campaign_uuid: realCampaignId })
       
       data = rpcResult.data
       error = rpcResult.error
       
-      // If RPC fails, fallback to direct query (will only show own membership due to RLS)
+      // If RPC fails, check the error type
       if (error) {
-        console.warn("[v0] handleViewCampaign: RPC function failed, trying direct query:", error)
-        console.warn("[v0] handleViewCampaign: Error details:", JSON.stringify(error, null, 2))
+        console.error("[v0] handleViewCampaign: RPC function failed")
+        console.error("[v0] handleViewCampaign: Error code:", error.code)
+        console.error("[v0] handleViewCampaign: Error message:", error.message)
+        console.error("[v0] handleViewCampaign: Error details:", error.details)
+        console.error("[v0] handleViewCampaign: Error hint:", error.hint)
+        console.error("[v0] handleViewCampaign: Full error:", JSON.stringify(error, null, 2))
         
-        // Fallback: try direct query (limited by RLS)
+        // If function doesn't exist (42883) or permission denied (42501), show helpful error
+        if (error.code === "42883" || error.message?.includes("does not exist")) {
+          setError("La función get_campaign_members no existe. Por favor ejecuta el script SQL 054 en Supabase.")
+          return
+        }
+        
+        if (error.code === "42501" || error.message?.includes("permission denied")) {
+          setError("No tienes permisos para ejecutar la función. Verifica los permisos en Supabase.")
+          return
+        }
+        
+        // For other errors, try fallback but warn user
+        console.warn("[v0] handleViewCampaign: Attempting fallback to direct query (limited visibility)")
         const directResult = await supabase
           .from("campaign_members")
           .select("id, user_id, character_id, role, joined_at")
           .eq("campaign_id", realCampaignId)
         
-        if (!directResult.error) {
-          console.log("[v0] handleViewCampaign: Using direct query fallback (limited visibility)")
+        if (!directResult.error && directResult.data) {
+          console.warn("[v0] handleViewCampaign: Using direct query fallback - ONLY showing own membership due to RLS")
+          console.warn("[v0] handleViewCampaign: This is a temporary fallback. Please ensure RPC function is working.")
+          // Show warning to user that they're seeing limited data
+          setError("Advertencia: Solo puedes ver tu propia membresía. La función RPC no está disponible. Por favor ejecuta el script SQL 054.")
           data = directResult.data
           error = null
         } else {
           console.error("[v0] handleViewCampaign: Both RPC and direct query failed")
           throw directResult.error || error
         }
+      } else {
+        console.log("[v0] handleViewCampaign: RPC function succeeded, loaded", data?.length || 0, "members")
       }
 
       if (error) {
-        console.error("[v0] handleViewCampaign: Error loading members:", error)
-        console.error("[v0] handleViewCampaign: Error code:", error.code)
-        console.error("[v0] handleViewCampaign: Error message:", error.message)
-        console.error("[v0] handleViewCampaign: Error details:", error.details)
-        console.error("[v0] handleViewCampaign: Error hint:", error.hint)
+        console.error("[v0] handleViewCampaign: Final error:", error)
         throw error
       }
 
       console.log("[v0] handleViewCampaign: Members loaded:", data?.length || 0, data)
 
-      let membersWithEmails = data || []
-      if (data && data.length > 0) {
+      // Ensure we have data array
+      if (!data) {
+        console.warn("[v0] handleViewCampaign: No data returned, initializing empty array")
+        data = []
+      }
+
+      let membersWithEmails = data
+      if (data.length > 0) {
         // Obtener información de perfiles y personajes
         const userIds = [...new Set(data.map((m) => m.user_id))]
         const characterIds = data.map((m) => m.character_id).filter((id): id is string => id !== null)

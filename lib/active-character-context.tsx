@@ -60,10 +60,7 @@ export function ActiveCharacterProvider({ children }: { children: ReactNode }) {
     try {
       const supabase = createBrowserClient()
 
-      const queryPromise = supabase.from("characters").select("*").eq("id", id).maybeSingle()
-      const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("Query timeout")), 10000))
-
-      const { data, error } = (await Promise.race([queryPromise, timeoutPromise])) as any
+      const { data, error } = await supabase.from("characters").select("*").eq("id", id).maybeSingle()
 
       if (error) {
         console.error("[v0] Error loading active character:", error.message)

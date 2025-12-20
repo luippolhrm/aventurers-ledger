@@ -13,7 +13,7 @@ ALTER TABLE shop_items
   ADD COLUMN IF NOT EXISTS requirements TEXT,
   ADD COLUMN IF NOT EXISTS attunement BOOLEAN DEFAULT false,
   ADD COLUMN IF NOT EXISTS original_name_en TEXT,
-  ADD COLUMN IF NOT EXISTS source TEXT CHECK (source IN ('manual', 'openai', 'dnd5eapi', 'open5e'));
+  ADD COLUMN IF NOT EXISTS source TEXT CHECK (source IN ('manual'));
 
 -- Create indexes for common queries
 CREATE INDEX IF NOT EXISTS idx_shop_items_rarity ON shop_items(rarity);
@@ -31,4 +31,4 @@ COMMENT ON COLUMN shop_items.properties IS 'JSON array of item properties (versa
 COMMENT ON COLUMN shop_items.requirements IS 'Requirements to use the item';
 COMMENT ON COLUMN shop_items.attunement IS 'Whether the item requires attunement';
 COMMENT ON COLUMN shop_items.original_name_en IS 'Original name in English (for translated items)';
-COMMENT ON COLUMN shop_items.source IS 'Source of the item: manual, openai, dnd5eapi, open5e';
+COMMENT ON COLUMN shop_items.source IS 'Source of the item: manual';

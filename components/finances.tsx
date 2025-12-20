@@ -35,6 +35,7 @@ interface Movement {
   amount_to: number
   created_at: string
   movement_type: string
+  description?: string | null
 }
 
 interface Transfer {
@@ -831,24 +832,46 @@ export function Finances({ language }: FinancesProps) {
                 <div className="space-y-3">
                   {movements.map((movement) => (
                     <div key={movement.id} className="flex items-center justify-between p-4 bg-muted rounded-lg">
-                      <div className="flex items-center gap-4">
+                      <div className="flex items-center gap-4 flex-1">
                         <div className="text-sm text-muted-foreground">
                           {new Date(movement.created_at).toLocaleString(language)}
                         </div>
-                        <div className="flex items-center gap-2">
-                          <span className="font-medium">
-                            {movement.amount_from} {movement.from_currency}
-                          </span>
-                          <ArrowRight className="w-4 h-4" />
-                          <span className="font-medium">
-                            {Number.isInteger(movement.amount_to) ? movement.amount_to : movement.amount_to.toFixed(2)}{" "}
-                            {movement.to_currency}
-                          </span>
-                        </div>
+                        {movement.movement_type === "purchase" ? (
+                          <div className="flex-1">
+                            <div className="font-medium text-red-600">
+                              {movement.description || `Compra: ${movement.amount_from} ${movement.from_currency}`}
+                            </div>
+                            <div className="text-sm text-muted-foreground">
+                              -{movement.amount_from} {movement.from_currency}
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium">
+                              {movement.amount_from} {movement.from_currency}
+                            </span>
+                            {movement.from_currency !== movement.to_currency && (
+                              <>
+                                <ArrowRight className="w-4 h-4" />
+                                <span className="font-medium">
+                                  {Number.isInteger(movement.amount_to)
+                                    ? movement.amount_to
+                                    : movement.amount_to.toFixed(2)}{" "}
+                                  {movement.to_currency}
+                                </span>
+                              </>
+                            )}
+                          </div>
+                        )}
                         <span className="text-xs text-muted-foreground px-2 py-1 bg-background rounded">
                           {movement.movement_type}
                         </span>
                       </div>
+                      {movement.movement_type === "purchase" && (
+                        <div className="font-bold text-lg text-red-600">
+                          -{movement.amount_from} {movement.from_currency}
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>

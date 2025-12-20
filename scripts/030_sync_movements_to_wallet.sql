@@ -2,8 +2,9 @@
 -- This ensures the wallet total_wealth is always calculated from the movements table
 
 -- First, add movement_type column if it doesn't exist
+-- Note: The constraint will be updated by script 058 to include 'purchase'
 ALTER TABLE movements 
-ADD COLUMN IF NOT EXISTS movement_type TEXT CHECK (movement_type IN ('add', 'remove', 'conversion'));
+ADD COLUMN IF NOT EXISTS movement_type TEXT;
 
 -- Function to recalculate wallet balance from movements
 CREATE OR REPLACE FUNCTION recalculate_wallet_from_movements(p_character_id UUID)
@@ -22,6 +23,7 @@ BEGIN
   --   - Remove: subtract amount_from where movement_type = 'remove' and from_currency = currency
   --   - Conversion: subtract amount_from where movement_type = 'conversion' and from_currency = currency
   --                 AND add amount_to where movement_type = 'conversion' and to_currency = currency
+  --   - Purchase: EXCLUDED (purchases update wallet directly, not through movements)
   SELECT 
     COALESCE(SUM(CASE 
       WHEN from_currency = 'PP' AND movement_type = 'add' THEN amount_from
@@ -98,9 +100,18 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- Trigger function to recalculate wallet after movement is inserted
+-- Note: This trigger ignores 'purchase' movements because purchases
+-- update the wallet directly in the stored procedure
 CREATE OR REPLACE FUNCTION trigger_recalculate_wallet()
 RETURNS TRIGGER AS $$
 BEGIN
+  -- If this is a purchase movement, don't recalculate
+  -- The wallet was already updated directly in process_purchase
+  IF NEW.movement_type = 'purchase' THEN
+    RETURN NEW;
+  END IF;
+  
+  -- For other movement types, recalculate wallet from movements
   PERFORM recalculate_wallet_from_movements(NEW.character_id);
   RETURN NEW;
 END;

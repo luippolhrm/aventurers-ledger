@@ -4,15 +4,13 @@ import { useEffect, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Package, Pencil, Trash2, Plus } from "lucide-react"
 import { createBrowserClient } from "@/lib/supabase/client"
 import { useAuth } from "@/lib/auth-context"
 import { useToast } from "@/hooks/use-toast"
 import { translations, type Language } from "@/lib/translations"
-import type { ShopItemExtended } from "@/lib/services/item-api-service"
+import type { ShopItemExtended } from "@/lib/types/shop-item"
 import { ShopItemForm } from "./shop-item-form"
-import { ShopItemApiImporter } from "./shop-item-api-importer"
 
 interface ShopItemsManagerProps {
   shopId: string
@@ -39,7 +37,6 @@ export function ShopItemsManager({ shopId, shopName, language, isGm }: ShopItems
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [editingItem, setEditingItem] = useState<ShopItemRow | null>(null)
   const [isSaving, setIsSaving] = useState(false)
-  const [creationMethod, setCreationMethod] = useState<"manual" | "api">("manual")
 
   useEffect(() => {
     loadItems()
@@ -71,13 +68,11 @@ export function ShopItemsManager({ shopId, shopName, language, isGm }: ShopItems
 
   const handleCreateItem = () => {
     setEditingItem(null)
-    setCreationMethod("manual")
     setIsDialogOpen(true)
   }
 
   const handleEditItem = (item: ShopItemRow) => {
     setEditingItem(item)
-    setCreationMethod("manual")
     setIsDialogOpen(true)
   }
 
@@ -153,10 +148,6 @@ export function ShopItemsManager({ shopId, shopName, language, isGm }: ShopItems
     }
   }
 
-  const handleApiImported = (item: ShopItemExtended) => {
-    // Automatically save API-imported item
-    handleSaveItem(item)
-  }
 
   return (
     <div className="space-y-6">
@@ -222,11 +213,6 @@ export function ShopItemsManager({ shopId, shopName, language, isGm }: ShopItems
                   </span>
                   <span className="text-muted-foreground">Stock: {item.quantity_available}</span>
                 </div>
-                {item.source && (
-                  <div className="text-xs text-muted-foreground">
-                    Source: {item.source === "manual" ? "Manual" : "API"}
-                  </div>
-                )}
               </div>
             </CardContent>
           </Card>
@@ -241,7 +227,7 @@ export function ShopItemsManager({ shopId, shopName, language, isGm }: ShopItems
             <p className="text-lg font-semibold">{t.marketplace?.noItemsYet || "No items yet"}</p>
             <p className="text-muted-foreground mt-1">
               {isGm
-                ? "Add your first item using manual entry or import from APIs"
+                ? "Add your first item using the manual entry form"
                 : "The shop owner hasn't added any items yet"}
             </p>
             {isGm && (
@@ -264,41 +250,17 @@ export function ShopItemsManager({ shopId, shopName, language, isGm }: ShopItems
             <DialogDescription>
               {editingItem
                 ? "Update the item details below"
-                : "Add a new item manually or import from an API"}
+                : "Add a new item using the manual entry form"}
             </DialogDescription>
           </DialogHeader>
 
-          {editingItem ? (
-            // Edit mode: show only form
             <ShopItemForm
               language={language}
-              initialData={editingItem}
-              onSubmit={handleSaveItem}
-              onCancel={() => setIsDialogOpen(false)}
-              isLoading={isSaving}
-            />
-          ) : (
-            // Create mode: show tabs
-            <Tabs value={creationMethod} onValueChange={(v) => setCreationMethod(v as typeof creationMethod)}>
-              <TabsList className="grid w-full grid-cols-2">
-                <TabsTrigger value="manual">{t.marketplace?.manualCreation || "Manual"}</TabsTrigger>
-                <TabsTrigger value="api">{t.marketplace?.apiImport || "Import from API"}</TabsTrigger>
-              </TabsList>
-
-              <TabsContent value="manual" className="mt-6">
-                <ShopItemForm
-                  language={language}
+            initialData={editingItem || undefined}
                   onSubmit={handleSaveItem}
                   onCancel={() => setIsDialogOpen(false)}
                   isLoading={isSaving}
                 />
-              </TabsContent>
-
-              <TabsContent value="api" className="mt-6">
-                <ShopItemApiImporter language={language} onItemImported={handleApiImported} />
-              </TabsContent>
-            </Tabs>
-          )}
         </DialogContent>
       </Dialog>
     </div>

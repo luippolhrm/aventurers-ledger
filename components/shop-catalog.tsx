@@ -6,10 +6,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { ShoppingCart } from "lucide-react"
+import { ShoppingCart, ShoppingBag } from "lucide-react"
 import { createBrowserClient } from "@/lib/supabase/client"
 import { useAuth } from "@/lib/auth-context"
 import { type Language, translations } from "@/lib/translations"
+import { useShoppingCart } from "@/hooks/use-shopping-cart"
+import { useToast } from "@/hooks/use-toast"
+import { formatPriceInGold } from "@/lib/utils"
 
 interface ShopItem {
   id: string
@@ -33,18 +36,21 @@ interface ShopCatalogProps {
   language: Language
   shopId: string
   characterId: string
+  isGm: boolean
 }
 
-export function ShopCatalog({ language, shopId, characterId }: ShopCatalogProps) {
+export function ShopCatalog({ language, shopId, characterId, isGm }: ShopCatalogProps) {
   const t = translations[language]
   const supabase = createBrowserClient()
   const { user } = useAuth()
+  const { addItem, itemCount } = useShoppingCart(shopId)
+  const { toast } = useToast()
 
   const [items, setItems] = useState<ShopItem[]>([])
   const [selectedItem, setSelectedItem] = useState<ShopItem | null>(null)
   const [quantity, setQuantity] = useState(1)
   const [isLoading, setIsLoading] = useState(false)
-  const [isBuyDialogOpen, setIsBuyDialogOpen] = useState(false)
+  const [isAddToCartDialogOpen, setIsAddToCartDialogOpen] = useState(false)
 
   useEffect(() => {
     loadCatalog()
@@ -63,120 +69,32 @@ export function ShopCatalog({ language, shopId, characterId }: ShopCatalogProps)
     }
   }
 
-  const handleBuyItem = async () => {
-    if (!selectedItem || !characterId) return
-
-    const totalCost = selectedItem.price_in_copper * quantity
+  const handleAddToCart = async () => {
+    if (!selectedItem || !characterId || isGm) return
 
     setIsLoading(true)
-
-    // Get wallet balance
-    const { data: walletData, error: walletError } = await supabase
-      .from("wallets")
-      .select("*")
-      .eq("character_id", characterId)
-      .maybeSingle()
-
-    if (walletError || !walletData) {
-      console.error("[v0] Error loading wallet:", walletError)
+    const success = await addItem(selectedItem.id, quantity)
       setIsLoading(false)
-      return
-    }
 
-    const totalInCopper =
-      walletData.copper +
-      walletData.silver * 10 +
-      walletData.electrum * 50 +
-      walletData.gold * 100 +
-      walletData.platinum * 1000
-
-    if (totalInCopper < totalCost) {
-      console.error("[v0] Insufficient funds for purchase")
-      setIsLoading(false)
-      return
-    }
-
-    // Add item to inventory
-    const { error: inventoryError } = await supabase.from("inventory").insert({
-      character_id: characterId,
-      item_name: selectedItem.item_name,
-      item_type: selectedItem.item_type,
-      quantity,
-      weight: selectedItem.weight * quantity,
-      value_in_copper: selectedItem.price_in_copper * quantity,
-      description: selectedItem.description,
-    })
-
-    if (inventoryError) {
-      console.error("[v0] Error adding item to inventory:", inventoryError)
-      setIsLoading(false)
-      return
-    }
-
-    // Deduct from wallet (prioritize gold)
-    let remaining = totalCost
-    let newCopper = walletData.copper
-    let newSilver = walletData.silver
-    let newElectrum = walletData.electrum
-    let newGold = walletData.gold
-    let newPlatinum = walletData.platinum
-
-    if (remaining >= 1000 && newPlatinum > 0) {
-      const platinumSpend = Math.min(Math.floor(remaining / 1000), newPlatinum)
-      newPlatinum -= platinumSpend
-      remaining -= platinumSpend * 1000
-    }
-
-    if (remaining >= 100 && newGold > 0) {
-      const goldSpend = Math.min(Math.floor(remaining / 100), newGold)
-      newGold -= goldSpend
-      remaining -= goldSpend * 100
-    }
-
-    if (remaining >= 50 && newElectrum > 0) {
-      const electrumSpend = Math.min(Math.floor(remaining / 50), newElectrum)
-      newElectrum -= electrumSpend
-      remaining -= electrumSpend * 50
-    }
-
-    if (remaining >= 10 && newSilver > 0) {
-      const silverSpend = Math.min(Math.floor(remaining / 10), newSilver)
-      newSilver -= silverSpend
-      remaining -= silverSpend * 10
-    }
-
-    newCopper -= remaining
-
-    // Update wallet
-    const { error: updateError } = await supabase
-      .from("wallets")
-      .update({
-        copper: Math.max(0, newCopper),
-        silver: Math.max(0, newSilver),
-        electrum: Math.max(0, newElectrum),
-        gold: Math.max(0, newGold),
-        platinum: Math.max(0, newPlatinum),
-        total_wealth: totalInCopper - totalCost,
-      })
-      .eq("character_id", characterId)
-
-    if (!updateError) {
-      setIsBuyDialogOpen(false)
+    if (success) {
+      setIsAddToCartDialogOpen(false)
       setSelectedItem(null)
       setQuantity(1)
     }
-
-    setIsLoading(false)
   }
 
   return (
     <div className="w-full max-w-4xl mx-auto space-y-6">
+      <div className="flex items-center justify-between">
       <div>
         <h2 className="text-3xl font-bold flex items-center gap-2 text-foreground">
           <ShoppingCart className="w-8 h-8" />
           {t.marketplace?.catalog || "Shop Catalog"}
         </h2>
-        <p className="text-muted-foreground mt-2">{t.marketplace?.catalogDescription || "Browse and purchase items"}</p>
+          <p className="text-muted-foreground mt-2">
+            {t.marketplace?.catalogDescription || "Browse and purchase items"}
+          </p>
+        </div>
       </div>
 
       <div className="grid gap-4">
@@ -206,7 +124,7 @@ export function ShopCatalog({ language, shopId, characterId }: ShopCatalogProps)
                       </CardDescription>
                     </div>
                     <div className="text-right">
-                      <p className="text-lg font-bold">{(item.price_in_copper / 100).toFixed(2)} gp</p>
+                      <p className="text-lg font-bold">{formatPriceInGold(item.price_in_copper)}</p>
                       <p className="text-xs text-muted-foreground">Stock: {item.quantity_available}</p>
                     </div>
                   </div>
@@ -230,15 +148,54 @@ export function ShopCatalog({ language, shopId, characterId }: ShopCatalogProps)
                   )}
 
                   {/* Properties */}
-                  {item.properties && item.properties.length > 0 && (
+                  {(() => {
+                    let properties: string[] = []
+                    if (item.properties) {
+                      if (typeof item.properties === 'string') {
+                        try {
+                          const parsed = JSON.parse(item.properties)
+                          // Asegurar que sea un array
+                          if (Array.isArray(parsed)) {
+                            properties = parsed.filter((p: any) => typeof p === 'string' && p.trim().length > 0)
+                          } else if (typeof parsed === 'string' && parsed.trim().length > 0) {
+                            properties = [parsed]
+                          }
+                        } catch {
+                          // Si no es JSON válido, tratar como string simple solo si no está vacío
+                          if (item.properties.trim().length > 0) {
+                            properties = [item.properties]
+                          }
+                        }
+                      } else if (Array.isArray(item.properties)) {
+                        // Filtrar solo strings válidos (no vacíos, no solo comillas)
+                        properties = item.properties.filter((p: any) => {
+                          if (typeof p !== 'string') return false
+                          const trimmed = p.trim()
+                          // Filtrar strings vacíos, solo comillas, o valores malformados
+                          return trimmed.length > 0 && 
+                                 trimmed !== '"' && 
+                                 trimmed !== '""' && 
+                                 trimmed !== '"""' &&
+                                 !trimmed.match(/^["\\]+$/) // No solo comillas y backslashes
+                        })
+                      }
+                    }
+                    // Asegurar que properties sea un array antes de usar .map()
+                    if (!Array.isArray(properties)) {
+                      properties = []
+                    }
+                    // Filtrar valores vacíos o inválidos una vez más antes de renderizar
+                    properties = properties.filter(p => p && p.trim().length > 0)
+                    return properties.length > 0 ? (
                     <div className="flex flex-wrap gap-1 mt-2">
-                      {item.properties.map((prop, idx) => (
+                        {properties.map((prop, idx) => (
                         <span key={idx} className="text-xs px-2 py-1 rounded-md bg-secondary">
                           {prop}
                         </span>
                       ))}
                     </div>
-                  )}
+                    ) : null
+                  })()}
 
                   {/* Attunement */}
                   {item.attunement && (
@@ -249,26 +206,30 @@ export function ShopCatalog({ language, shopId, characterId }: ShopCatalogProps)
                 </div>
               </div>
             </CardHeader>
+            {!isGm && (
             <CardContent>
               <Button
                 onClick={() => {
                   setSelectedItem(item)
                   setQuantity(1)
-                  setIsBuyDialogOpen(true)
+                    setIsAddToCartDialogOpen(true)
                 }}
                 className="w-full"
+                  disabled={item.quantity_available === 0}
               >
-                {t.marketplace?.buy || "Buy"}
+                  <ShoppingBag className="w-4 h-4 mr-2" />
+                  {t.marketplace?.addToCart || "Add to Cart"}
               </Button>
             </CardContent>
+            )}
           </Card>
         ))}
       </div>
 
-      <Dialog open={isBuyDialogOpen} onOpenChange={setIsBuyDialogOpen}>
+      <Dialog open={isAddToCartDialogOpen} onOpenChange={setIsAddToCartDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>{t.marketplace?.purchaseItem || "Purchase Item"}</DialogTitle>
+            <DialogTitle>{t.marketplace?.addToCart || "Add to Cart"}</DialogTitle>
             <DialogDescription>{selectedItem?.item_name}</DialogDescription>
           </DialogHeader>
 
@@ -287,17 +248,22 @@ export function ShopCatalog({ language, shopId, characterId }: ShopCatalogProps)
 
               <div className="bg-muted p-4 rounded-lg">
                 <p className="text-sm text-muted-foreground">
-                  {t.marketplace?.pricePerUnit || "Price per unit"}: {(selectedItem.price_in_copper / 100).toFixed(2)}{" "}
-                  gp
+                  {t.marketplace?.pricePerUnit || "Price per unit"}: {formatPriceInGold(selectedItem.price_in_copper)}
                 </p>
                 <p className="text-lg font-bold">
-                  {t.marketplace?.totalPrice || "Total"}: {((selectedItem.price_in_copper * quantity) / 100).toFixed(2)}{" "}
-                  gp
+                  {t.marketplace?.subtotal || "Subtotal"}: {formatPriceInGold(selectedItem.price_in_copper * quantity)}
                 </p>
               </div>
 
-              <Button onClick={handleBuyItem} disabled={isLoading} className="w-full">
-                {t.marketplace?.confirmPurchase || "Confirm Purchase"}
+              <Button onClick={handleAddToCart} disabled={isLoading} className="w-full">
+                {isLoading ? (
+                  t.marketplace?.adding || "Adding..."
+                ) : (
+                  <>
+                    <ShoppingBag className="w-4 h-4 mr-2" />
+                    {t.marketplace?.addToCart || "Add to Cart"}
+                  </>
+                )}
               </Button>
             </div>
           )}

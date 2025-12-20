@@ -55,15 +55,12 @@ export function CharacterSelector({ language, onNavigateToCharacters }: Characte
         return
       }
 
-      const queryPromise = supabase
+      const { data, error } = await supabase
         .from("characters")
         .select("*")
         .eq("archived", false)
         .eq("user_id", user.id)
         .order("created_at")
-      const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("Query timeout")), 10000))
-
-      const { data, error } = (await Promise.race([queryPromise, timeoutPromise])) as any
 
       if (error) {
         console.error("[v0] CharacterSelector: Error loading characters:", error.message)

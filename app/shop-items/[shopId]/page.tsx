@@ -5,9 +5,12 @@ import { useRouter } from "next/navigation"
 import { createBrowserClient } from "@/lib/supabase/client"
 import { useAuth } from "@/lib/auth-context"
 import { useLanguage } from "@/lib/language-context"
+import { useActiveCharacter } from "@/lib/active-character-context"
 import { ShopItemsManager } from "@/components/shop-items-manager"
+import { ShopCatalog } from "@/components/shop-catalog"
+import { ShoppingCartComponent } from "@/components/shopping-cart"
 import { Button } from "@/components/ui/button"
-import { ArrowLeft, Loader2 } from "lucide-react"
+import { ArrowLeft, Loader2, Package } from "lucide-react"
 
 interface ShopData {
   id: string
@@ -29,6 +32,7 @@ export default function ShopItemsPage({ params }: { params: Promise<{ shopId: st
   const router = useRouter()
   const { user } = useAuth()
   const { language } = useLanguage()
+  const { activeCharacterId } = useActiveCharacter()
   const supabase = createBrowserClient()
   
   // Unwrap params Promise using React.use()
@@ -197,16 +201,36 @@ export default function ShopItemsPage({ params }: { params: Promise<{ shopId: st
         </div>
       </div>
 
-      {/* Shop Items Manager */}
+      {isGm ? (
+        /* GM View: Shop Items Manager */
       <ShopItemsManager shopId={shopId} shopName={shop.name} language={language} isGm={isGm} />
-
-      {/* Read-only notice for non-GMs */}
-      {!isGm && (
-        <div className="mt-6 p-4 bg-muted rounded-lg">
-          <p className="text-sm text-muted-foreground">
-            ℹ️ You're viewing this shop as a player. Only the Game Master can add or edit items.
-          </p>
+      ) : (
+        /* Player View: Shop Catalog + Shopping Cart */
+        activeCharacterId ? (
+          <div className="grid gap-6 lg:grid-cols-3">
+            <div className="lg:col-span-2">
+              <ShopCatalog shopId={shopId} characterId={activeCharacterId} isGm={isGm} language={language} />
+            </div>
+            <div className="lg:col-span-1">
+              <ShoppingCartComponent
+                shopId={shopId}
+                characterId={activeCharacterId}
+                isGm={isGm}
+                language={language}
+              />
+            </div>
+          </div>
+        ) : (
+          <div className="p-8 text-center">
+            <Package className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
+            <p className="text-lg font-semibold mb-2">No Character Selected</p>
+            <p className="text-muted-foreground mb-4">Please select a character to view and purchase items.</p>
+            <Button onClick={handleBack} variant="outline">
+              <ArrowLeft className="w-4 h-4 mr-2" />
+              Go Back
+            </Button>
         </div>
+        )
       )}
     </div>
   )

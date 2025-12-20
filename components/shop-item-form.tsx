@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { translations, type Language } from "@/lib/translations"
-import type { ShopItemExtended } from "@/lib/services/item-api-service"
+import type { ShopItemExtended } from "@/lib/types/shop-item"
 
 interface ShopItemFormProps {
   language: Language

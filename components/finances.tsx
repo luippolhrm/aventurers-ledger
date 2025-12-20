@@ -36,6 +36,10 @@ interface Movement {
   created_at: string
   movement_type: string
   description?: string | null
+  shop_id?: string | null
+  location_id?: string | null
+  shop?: { name: string } | null
+  location?: { name: string } | null
 }
 
 interface Transfer {
@@ -177,7 +181,11 @@ export function Finances({ language }: FinancesProps) {
 
     const { data } = await supabase
       .from("movements")
-      .select("*")
+      .select(`
+        *,
+        shop:shops(id, name),
+        location:locations(id, name)
+      `)
       .eq("character_id", activeCharacter.id)
       .order("created_at", { ascending: false })
       .limit(20)
@@ -841,8 +849,13 @@ export function Finances({ language }: FinancesProps) {
                             <div className="font-medium text-red-600">
                               {movement.description || `Compra: ${movement.amount_from} ${movement.from_currency}`}
                             </div>
-                            <div className="text-sm text-muted-foreground">
-                              -{movement.amount_from} {movement.from_currency}
+                            <div className="text-sm text-muted-foreground space-y-1">
+                              <div>-{movement.amount_from} {movement.from_currency}</div>
+                              {movement.shop && movement.location && (
+                                <div className="text-xs italic">
+                                  {movement.shop.name} • {movement.location.name}
+                                </div>
+                              )}
                             </div>
                           </div>
                         ) : (

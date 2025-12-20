@@ -37,6 +37,12 @@ DECLARE
   v_purchase_ids UUID[] := ARRAY[]::UUID[];
   v_movement_id UUID;
   
+  -- Variables para shop y location
+  v_shop_name TEXT;
+  v_location_name TEXT;
+  v_location_id UUID;
+  v_enhanced_description TEXT;
+  
   -- Variables de control
   v_error_message TEXT;
 BEGIN
@@ -224,8 +230,34 @@ BEGIN
   WHERE character_id = p_character_id;
   
   -- ========================================================================
-  -- SECCIÓN 6: CREAR MOVIMIENTO 'PURCHASE' EN MOVEMENTS
+  -- SECCIÓN 6: OBTENER INFORMACIÓN DE SHOP Y LOCATION
   -- ========================================================================
+  
+  -- Obtener nombre de la tienda y location
+  SELECT 
+    s.name,
+    s.location_id,
+    l.name
+  INTO 
+    v_shop_name,
+    v_location_id,
+    v_location_name
+  FROM shops s
+  JOIN locations l ON l.id = s.location_id
+  WHERE s.id = p_shop_id;
+  
+  -- Si no se encontró, usar valores por defecto
+  IF v_shop_name IS NULL THEN
+    v_shop_name := 'Tienda desconocida';
+    v_location_name := 'Ubicación desconocida';
+  END IF;
+  
+  -- ========================================================================
+  -- SECCIÓN 7: CREAR MOVIMIENTO 'PURCHASE' EN MOVEMENTS
+  -- ========================================================================
+  
+  -- Construir descripción mejorada con tienda y pueblo
+  v_enhanced_description := p_purchase_description || ' (' || v_shop_name || ', ' || v_location_name || ')';
   
   INSERT INTO movements (
     character_id,
@@ -234,7 +266,9 @@ BEGIN
     amount_from,
     amount_to,
     movement_type,
-    description
+    description,
+    shop_id,
+    location_id
   ) VALUES (
     p_character_id,
     'CP',
@@ -242,11 +276,13 @@ BEGIN
     v_total_cost,
     v_total_cost,
     'purchase',
-    p_purchase_description
+    v_enhanced_description,
+    p_shop_id,
+    v_location_id
   ) RETURNING id INTO v_movement_id;
   
   -- ========================================================================
-  -- SECCIÓN 7: LIMPIAR CARRITO
+  -- SECCIÓN 8: LIMPIAR CARRITO
   -- ========================================================================
   
   DELETE FROM shopping_cart_items

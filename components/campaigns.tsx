@@ -304,14 +304,27 @@ export function Campaigns({ language }: CampaignsProps) {
         return
       }
 
-      // Find campaign by invite code
-      const { data: campaign, error: findError } = await supabase
-        .from("campaigns")
-        .select("id")
-        .eq("invite_code", inviteCode.trim().toUpperCase())
-        .single()
+      // Find campaign by invite code using RPC function (bypasses RLS)
+      const { data: campaignId, error: findError } = await supabase
+        .rpc("find_campaign_id_by_invite_code", {
+          invite_code_param: inviteCode.trim().toUpperCase()
+        })
 
-      if (findError || !campaign) {
+      if (findError) {
+        // Handle specific RPC errors
+        if (findError.code === "42883" || findError.message?.includes("does not exist")) {
+          setError("La función find_campaign_id_by_invite_code no existe. Por favor ejecuta el script SQL 058 en Supabase.")
+          return
+        }
+        if (findError.code === "42501" || findError.message?.includes("permission denied")) {
+          setError("No tienes permisos para buscar campañas. Verifica los permisos en Supabase.")
+          return
+        }
+        setError(t.campaigns.invalidInviteCode || "Invalid invite code")
+        return
+      }
+
+      if (!campaignId) {
         setError(t.campaigns.invalidInviteCode || "Invalid invite code")
         return
       }
@@ -320,7 +333,7 @@ export function Campaigns({ language }: CampaignsProps) {
       const { data: existingMember } = await supabase
         .from("campaign_members")
         .select("id, role")
-        .eq("campaign_id", campaign.id)
+        .eq("campaign_id", campaignId)
         .eq("user_id", user.id)
         .eq("character_id", activeCharacterId)
         .maybeSingle()
@@ -331,7 +344,7 @@ export function Campaigns({ language }: CampaignsProps) {
       }
 
       const { error: joinError } = await supabase.from("campaign_members").insert({
-        campaign_id: campaign.id,
+        campaign_id: campaignId,
         user_id: user.id,
         character_id: activeCharacterId,
         role: "player",
@@ -343,7 +356,7 @@ export function Campaigns({ language }: CampaignsProps) {
           const { data: checkMember } = await supabase
             .from("campaign_members")
             .select("role")
-            .eq("campaign_id", campaign.id)
+            .eq("campaign_id", campaignId)
             .eq("user_id", user.id)
             .eq("character_id", activeCharacterId)
             .maybeSingle()
@@ -817,7 +830,17 @@ export function Campaigns({ language }: CampaignsProps) {
       </Dialog>
 
       {/* Join Campaign Dialog */}
-      <Dialog open={isJoinDialogOpen} onOpenChange={setIsJoinDialogOpen}>
+      <Dialog 
+        open={isJoinDialogOpen} 
+        onOpenChange={(open) => {
+          setIsJoinDialogOpen(open)
+          if (!open) {
+            // Limpiar error y código de invitación al cerrar el modal
+            setError("")
+            setInviteCode("")
+          }
+        }}
+      >
         <DialogContent>
           <DialogHeader>
             <DialogTitle>{t.campaigns.joinCampaign || "Join Campaign"}</DialogTitle>
@@ -826,6 +849,13 @@ export function Campaigns({ language }: CampaignsProps) {
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
+            {/* Mostrar error dentro del modal para que sea visible en dispositivos móviles */}
+            {error && (
+              <Alert variant="destructive">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
+            )}
             <div>
               <Label htmlFor="inviteCode">{t.campaigns.inviteCode || "Invite Code"}</Label>
               <Input

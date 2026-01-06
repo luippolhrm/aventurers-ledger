@@ -2,15 +2,16 @@
 
 import type React from "react"
 
-import { createClient } from "@/lib/supabase/client"
+import { AuthService } from "@/lib/application/services"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { AuthLayout } from "@/components/auth-layout"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { useState } from "react"
+import { useState, useMemo } from "react"
 import { useLanguage } from "@/lib/language-context"
+import { ErrorService } from "@/lib/infrastructure/errors"
 
 export default function LoginPage() {
   const [email, setEmail] = useState("")
@@ -19,43 +20,41 @@ export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false)
   const router = useRouter()
   const { t } = useLanguage()
+  const authService = useMemo(() => new AuthService(), [])
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
-    const supabase = createClient()
     setIsLoading(true)
     setError(null)
 
     try {
-      const { error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      })
-      if (error) throw error
+      await authService.signIn({ email, password })
       router.push("/dashboard")
       router.refresh()
     } catch (error: unknown) {
-      setError(error instanceof Error ? error.message : t.auth.loginError)
+      const errorMessage =
+        error instanceof Error
+          ? error.message
+          : ErrorService.fromUnknownError(error).message
+      setError(errorMessage || t.auth.loginError)
     } finally {
       setIsLoading(false)
     }
   }
 
   const handleGoogleSignIn = async () => {
-    const supabase = createClient()
     setIsLoading(true)
     setError(null)
 
     try {
-      const { error } = await supabase.auth.signInWithOAuth({
-        provider: "google",
-        options: {
-          redirectTo: `${window.location.origin}/auth/callback`,
-        },
-      })
-      if (error) throw error
+      await authService.signInWithOAuth("google")
+      // El redirect se maneja automáticamente por OAuth
     } catch (error: unknown) {
-      setError(error instanceof Error ? error.message : t.auth.loginError)
+      const errorMessage =
+        error instanceof Error
+          ? error.message
+          : ErrorService.fromUnknownError(error).message
+      setError(errorMessage || t.auth.loginError)
       setIsLoading(false)
     }
   }

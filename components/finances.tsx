@@ -10,74 +10,31 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Textarea } from "@/components/ui/textarea"
 import { type Language, translations } from "@/lib/translations"
-import { createBrowserClient } from "@/lib/supabase/client"
 import { Coins, Plus, Minus, ArrowRight, Send, TrendingUp, AlertCircle } from "lucide-react"
-import { useActiveCharacter } from "@/lib/active-character-context"
+import { useServices } from "@/hooks/use-services"
+import { LoadingState } from "@/components/molecules/loading"
+import { EmptyState } from "@/components/molecules/empty"
+import type { WalletData } from "@/lib/infrastructure/repositories"
+import type { MovementWithDetails } from "@/lib/infrastructure/repositories"
+import type { TransferWithDetails } from "@/lib/infrastructure/repositories"
+import type { Character } from "@/lib/infrastructure/repositories"
 
 interface FinancesProps {
   language: Language
+  characterId: string
 }
 
-interface WalletData {
-  platinum: number
-  gold: number
-  electrum: number
-  silver: number
-  copper: number
-  total_wealth: number
-}
-
-interface Movement {
-  id: string
-  from_currency: string
-  to_currency: string
-  amount_from: number
-  amount_to: number
-  created_at: string
-  movement_type: string
-  description?: string | null
-  shop_id?: string | null
-  location_id?: string | null
-  shop?: { name: string } | null
-  location?: { name: string } | null
-}
-
-interface Transfer {
-  id: string
-  from_character_id: string
-  to_character_id: string
-  currency: string
-  amount: number
-  description: string
-  created_at: string
-  from_character?: { name: string }
-  to_character?: { name: string }
-}
-
-interface Character {
-  id: string
-  name: string
-}
-
-const CONVERSION_RATES = {
-  PP: 10,
-  GP: 1,
-  EP: 0.5,
-  SP: 0.1,
-  CP: 0.01,
-}
-
-export function Finances({ language }: FinancesProps) {
+export function Finances({ language, characterId }: FinancesProps) {
   const t = translations[language]
-  const { activeCharacter } = useActiveCharacter()
-  const supabase = createBrowserClient()
 
   const [wallet, setWallet] = useState<WalletData | null>(null)
-  const [movements, setMovements] = useState<Movement[]>([])
-  const [transfers, setTransfers] = useState<Transfer[]>([])
+  const [movements, setMovements] = useState<MovementWithDetails[]>([])
+  const [transfers, setTransfers] = useState<TransferWithDetails[]>([])
   const [allCharacters, setAllCharacters] = useState<Character[]>([])
   const [loading, setLoading] = useState(true)
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null)
+
+  const services = useServices()
 
   // Balance tab states
   const [balanceCurrency, setBalanceCurrency] = useState("")
@@ -103,7 +60,7 @@ export function Finances({ language }: FinancesProps) {
   ]
 
   useEffect(() => {
-    if (activeCharacter) {
+    if (characterId) {
       loadAllData()
     } else {
       setWallet(null)
@@ -111,163 +68,110 @@ export function Finances({ language }: FinancesProps) {
       setTransfers([])
       setLoading(false)
     }
-  }, [activeCharacter])
+  }, [characterId])
 
   const loadAllData = async () => {
-    if (!activeCharacter) return
+    if (!characterId) return
 
     setLoading(true)
+    setMessage(null)
     try {
       await Promise.all([loadWallet(), loadMovements(), loadTransfers(), loadAllCharacters()])
     } catch (error) {
       console.error("[v0] Error loading data:", error)
+      setMessage({ type: "error", text: "Error loading data" })
     } finally {
       setLoading(false)
     }
   }
 
   const loadWallet = async () => {
-    if (!activeCharacter) return
+    if (!characterId) return
 
-    // El wallet se crea automáticamente mediante trigger al crear el personaje
-    // Si no existe, esperar un poco y reintentar (el trigger puede estar procesando)
-    let retries = 3
-    let data = null
-    let error = null
-
-    while (retries > 0) {
-      const result = await supabase.from("wallets").select("*").eq("character_id", activeCharacter.id).maybeSingle()
-      data = result.data
-      error = result.error
-
-      if (data) {
-        // Wallet encontrado, salir del loop
-        break
-      }
-
-      if (error && error.code !== "PGRST116") {
-        // Error diferente a "no encontrado", salir
-        break
-      }
-
-      // Wallet no encontrado, esperar un poco antes de reintentar
-      retries--
-      if (retries > 0) {
-        await new Promise((resolve) => setTimeout(resolve, 500)) // Esperar 500ms
-      }
-    }
-
-    if (data) {
-      setWallet({
-        platinum: Number(data.platinum),
-        gold: Number(data.gold),
-        electrum: Number(data.electrum),
-        silver: Number(data.silver),
-        copper: Number(data.copper),
-        total_wealth: Number(data.total_wealth || 0),
-      })
-    } else {
-      // Si después de los reintentos aún no existe, inicializar con valores por defecto
-      // El trigger debería haberlo creado, pero por si acaso
+    try {
+      const walletData = await services.wallet.getWallet(characterId)
+      setWallet(walletData)
+    } catch (error: any) {
+      console.error("[v0] Error loading wallet:", error)
       setWallet({ platinum: 0, gold: 0, electrum: 0, silver: 0, copper: 0, total_wealth: 0 })
-      if (error && error.code !== "PGRST116") {
-        console.error("[v0] Error loading wallet:", error)
-      }
     }
   }
 
   const loadMovements = async () => {
-    if (!activeCharacter) return
+    if (!characterId) return
 
-    const { data } = await supabase
-      .from("movements")
-      .select(`
-        *,
-        shop:shops(id, name),
-        location:locations(id, name)
-      `)
-      .eq("character_id", activeCharacter.id)
-      .order("created_at", { ascending: false })
-      .limit(20)
-
-    setMovements(data || [])
+    try {
+      const movementsData = await services.movement.getMovementsWithDetails(characterId, 20)
+      setMovements(movementsData)
+    } catch (error: any) {
+      console.error("[v0] Error loading movements:", error)
+      setMovements([])
+    }
   }
 
   const loadTransfers = async () => {
-    if (!activeCharacter) return
+    if (!characterId) return
 
-    const { data } = await supabase
-      .from("transfers")
-      .select(`
-        *,
-        from_character:characters!from_character_id(name),
-        to_character:characters!to_character_id(name)
-      `)
-      .or(`from_character_id.eq.${activeCharacter.id},to_character_id.eq.${activeCharacter.id}`)
-      .order("created_at", { ascending: false })
-      .limit(20)
-
-    setTransfers(data || [])
+    try {
+      const transfersData = await services.transfer.getTransfersWithDetails(characterId, 20)
+      setTransfers(transfersData)
+    } catch (error: any) {
+      console.error("[v0] Error loading transfers:", error)
+      setTransfers([])
+    }
   }
 
   const loadAllCharacters = async () => {
-    // Note: This intentionally loads ALL characters (not filtered by user_id) 
-    // because users need to be able to transfer money to characters from other users
-    const { data } = await supabase.from("characters").select("id, name").eq("archived", false).order("name")
-
-    setAllCharacters(data || [])
+    try {
+      // Note: This intentionally loads ALL characters (not filtered by user_id)
+      // because users need to be able to transfer money to characters from other users
+      const characters = await services.character.getAllCharacters(false)
+      setAllCharacters(characters)
+    } catch (error: any) {
+      console.error("[v0] Error loading characters:", error)
+      setAllCharacters([])
+    }
   }
 
   const handleAddCoins = async () => {
-    if (!activeCharacter || !wallet) return
+    if (!characterId || !wallet) return
 
     const amount = Number.parseFloat(balanceAmount)
-    if (isNaN(amount) || amount <= 0) {
+    if (isNaN(amount) || amount <= 0 || !Number.isFinite(amount)) {
       setMessage({ type: "error", text: t.wallet.error })
       return
     }
 
-    const currencyMap: Record<string, keyof Omit<WalletData, "total_wealth">> = {
-      PP: "platinum",
-      GP: "gold",
-      EP: "electrum",
-      SP: "silver",
-      CP: "copper",
-    }
-
-    const key = currencyMap[balanceCurrency]
-    const newBalance = wallet[key] + amount
-
-    const { error: walletError } = await supabase
-      .from("wallets")
-      .update({ [key]: newBalance })
-      .eq("character_id", activeCharacter.id)
-
-    if (walletError) {
-      setMessage({ type: "error", text: t.wallet.error })
+    if (!balanceCurrency) {
+      setMessage({ type: "error", text: t.wallet.selectCurrency })
       return
     }
 
-    await supabase.from("movements").insert({
-      character_id: activeCharacter.id,
-      from_currency: balanceCurrency,
-      to_currency: balanceCurrency,
-      amount_from: amount,
-      amount_to: amount,
-      movement_type: "add",
-    })
+    try {
+      setMessage(null)
+      // Create add movement - the trigger will automatically update the wallet balance
+      await services.movement.createAdd(characterId, balanceCurrency as "PP" | "GP" | "EP" | "SP" | "CP", amount)
 
-    setMessage({ type: "success", text: t.wallet.success })
-    setBalanceAmount("")
-    await loadAllData()
+      setMessage({ type: "success", text: t.wallet.success })
+      setBalanceAmount("")
+      await loadAllData()
+    } catch (error: any) {
+      console.error("Error adding coins:", error)
+      setMessage({ type: "error", text: error?.message || t.wallet.error })
+    }
   }
 
   const handleRemoveCoins = async () => {
-    if (!activeCharacter || !wallet) return
+    if (!characterId || !wallet) return
 
     const amount = Number.parseFloat(balanceAmount)
-    if (isNaN(amount) || amount <= 0) {
+    if (isNaN(amount) || amount <= 0 || !Number.isFinite(amount)) {
       setMessage({ type: "error", text: t.wallet.error })
+      return
+    }
+
+    if (!balanceCurrency) {
+      setMessage({ type: "error", text: t.wallet.selectCurrency })
       return
     }
 
@@ -286,48 +190,40 @@ export function Finances({ language }: FinancesProps) {
       return
     }
 
-    const newBalance = wallet[key] - amount
+    try {
+      setMessage(null)
+      // Create remove movement - the trigger will automatically update the wallet balance
+      await services.movement.createRemove(characterId, balanceCurrency as "PP" | "GP" | "EP" | "SP" | "CP", amount)
 
-    const { error: walletError } = await supabase
-      .from("wallets")
-      .update({ [key]: newBalance })
-      .eq("character_id", activeCharacter.id)
-
-    if (walletError) {
-      setMessage({ type: "error", text: t.wallet.error })
-      return
+      setMessage({ type: "success", text: t.wallet.success })
+      setBalanceAmount("")
+      await loadAllData()
+    } catch (error: any) {
+      console.error("Error removing coins:", error)
+      setMessage({ type: "error", text: error?.message || t.wallet.error })
     }
-
-    await supabase.from("movements").insert({
-      character_id: activeCharacter.id,
-      from_currency: balanceCurrency,
-      to_currency: balanceCurrency,
-      amount_from: amount,
-      amount_to: amount,
-      movement_type: "remove",
-    })
-
-    setMessage({ type: "success", text: t.wallet.success })
-    setBalanceAmount("")
-    await loadAllData()
   }
 
   const calculateConversion = () => {
     if (!transAmount || !transFromCurrency || !transToCurrency) return 0
 
     const amountNum = Number.parseFloat(transAmount)
-    const fromRate = CONVERSION_RATES[transFromCurrency as keyof typeof CONVERSION_RATES]
-    const toRate = CONVERSION_RATES[transToCurrency as keyof typeof CONVERSION_RATES]
+    if (isNaN(amountNum) || amountNum <= 0) return 0
 
-    return (amountNum * fromRate) / toRate
+    return services.movement.calculateConversion(amountNum, transFromCurrency, transToCurrency)
   }
 
   const handleConversion = async () => {
-    if (!activeCharacter || !wallet) return
+    if (!characterId || !wallet) return
 
     const amount = Number.parseFloat(transAmount)
     if (isNaN(amount) || amount <= 0) {
       setMessage({ type: "error", text: t.movements.invalidAmount })
+      return
+    }
+
+    if (!transFromCurrency || !transToCurrency) {
+      setMessage({ type: "error", text: t.movements.selectCurrency })
       return
     }
 
@@ -345,39 +241,34 @@ export function Finances({ language }: FinancesProps) {
     }
 
     const fromKey = currencyMap[transFromCurrency]
-    const toKey = currencyMap[transToCurrency]
 
     if (wallet[fromKey] < amount) {
       setMessage({ type: "error", text: t.movements.insufficientFunds })
       return
     }
 
-    const convertedAmount = calculateConversion()
+    try {
+      setMessage(null)
+      await services.movement.createConversion(
+        characterId,
+        transFromCurrency,
+        transToCurrency,
+        amount
+      )
 
-    // Insert movement - the trigger will automatically update the wallet balance
-    const { error: movementError } = await supabase.from("movements").insert({
-      character_id: activeCharacter.id,
-      from_currency: transFromCurrency,
-      to_currency: transToCurrency,
-      amount_from: amount,
-      amount_to: convertedAmount,
-      movement_type: "conversion",
-    })
-
-    if (movementError) {
-      setMessage({ type: "error", text: t.wallet.error })
-      return
+      setMessage({ type: "success", text: t.movements.success })
+      setTransAmount("")
+      setTransFromCurrency("")
+      setTransToCurrency("")
+      await loadAllData()
+    } catch (error: any) {
+      console.error("Error in conversion:", error)
+      setMessage({ type: "error", text: error?.message || t.wallet.error })
     }
-
-    setMessage({ type: "success", text: t.movements.success })
-    setTransAmount("")
-    setTransFromCurrency("")
-    setTransToCurrency("")
-    await loadAllData()
   }
 
   const handleTransfer = async () => {
-    if (!activeCharacter || !wallet) return
+    if (!characterId || !wallet) return
 
     const amount = Number.parseFloat(transferAmount)
     if (isNaN(amount) || amount <= 0) {
@@ -390,8 +281,13 @@ export function Finances({ language }: FinancesProps) {
       return
     }
 
-    if (transferToCharacter === activeCharacter.id) {
+    if (transferToCharacter === characterId) {
       setMessage({ type: "error", text: t.finances.cannotTransferSelf })
+      return
+    }
+
+    if (!transferCurrency) {
+      setMessage({ type: "error", text: t.wallet.selectCurrency })
       return
     }
 
@@ -410,79 +306,44 @@ export function Finances({ language }: FinancesProps) {
       return
     }
 
-    // Get recipient wallet
-    const { data: recipientWallet } = await supabase
-      .from("wallets")
-      .select("*")
-      .eq("character_id", transferToCharacter)
-      .single()
+    try {
+      setMessage(null)
+      await services.transfer.createTransfer(
+        characterId,
+        transferToCharacter,
+        transferCurrency as "PP" | "GP" | "EP" | "SP" | "CP",
+        amount,
+        transferDescription || null
+      )
 
-    if (!recipientWallet) {
-      setMessage({ type: "error", text: t.finances.recipientNotFound })
-      return
+      setMessage({ type: "success", text: t.finances.transferSuccess })
+      setTransferAmount("")
+      setTransferToCharacter("")
+      setTransferDescription("")
+      await loadAllData()
+    } catch (error: any) {
+      console.error("Error in transfer:", error)
+      setMessage({ type: "error", text: error?.message || t.wallet.error })
     }
-
-    // Update both wallets
-    const { error: senderError } = await supabase
-      .from("wallets")
-      .update({ [key]: wallet[key] - amount })
-      .eq("character_id", activeCharacter.id)
-
-    if (senderError) {
-      setMessage({ type: "error", text: t.wallet.error })
-      return
-    }
-
-    const { error: recipientError } = await supabase
-      .from("wallets")
-      .update({ [key]: recipientWallet[key] + amount })
-      .eq("character_id", transferToCharacter)
-
-    if (recipientError) {
-      setMessage({ type: "error", text: t.wallet.error })
-      return
-    }
-
-    // Record transfer
-    await supabase.from("transfers").insert({
-      from_character_id: activeCharacter.id,
-      to_character_id: transferToCharacter,
-      currency: transferCurrency,
-      amount: amount,
-      description: transferDescription || null,
-    })
-
-    setMessage({ type: "success", text: t.finances.transferSuccess })
-    setTransferAmount("")
-    setTransferToCharacter("")
-    setTransferDescription("")
-    await loadAllData()
   }
 
   if (loading) {
     return (
-      <Card className="w-full max-w-6xl">
-        <CardContent className="py-8">
-          <p className="text-center text-muted-foreground">Loading...</p>
-        </CardContent>
-      </Card>
+      <div className="w-full max-w-6xl mx-auto p-6">
+        <LoadingState message={(t.finances as any)?.loading || "Loading finances..."} />
+      </div>
     )
   }
 
-  if (!activeCharacter) {
+  if (!characterId) {
     return (
-      <Card className="w-full max-w-6xl">
-        <CardHeader>
-          <CardTitle>{t.finances.title}</CardTitle>
-          <CardDescription>{t.finances.description}</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Alert>
-            <AlertCircle className="h-4 w-4" />
-            <AlertDescription>{t.wallet.noCharacter}</AlertDescription>
-          </Alert>
-        </CardContent>
-      </Card>
+      <div className="w-full max-w-6xl mx-auto p-6">
+        <EmptyState
+          icon={Coins}
+          title={t.wallet.noCharacter || "No character selected"}
+          description={t.finances.description || "Please select a character to view finances"}
+        />
+      </div>
     )
   }
 
@@ -706,7 +567,7 @@ export function Finances({ language }: FinancesProps) {
                   </SelectTrigger>
                   <SelectContent>
                     {allCharacters
-                      .filter((c) => c.id !== activeCharacter.id)
+                      .filter((c) => c.id !== characterId)
                       .map((c) => (
                         <SelectItem key={c.id} value={c.id}>
                           {c.name}
@@ -782,7 +643,7 @@ export function Finances({ language }: FinancesProps) {
               ) : (
                 <div className="space-y-3">
                   {transfers.map((transfer) => {
-                    const isSender = transfer.from_character_id === activeCharacter.id
+                    const isSender = transfer.from_character_id === characterId
                     return (
                       <div
                         key={transfer.id}

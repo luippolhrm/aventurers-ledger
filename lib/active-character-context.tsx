@@ -1,5 +1,21 @@
 "use client"
 
+/**
+ * @deprecated Este contexto está siendo deprecado en favor de un modelo basado en contexto de campaña.
+ * Los personajes ahora se asignan a campañas específicas y se obtienen desde el contexto de la campaña.
+ * 
+ * Componentes que aún usan este contexto (para referencia):
+ * - components/characters-unified.tsx: Gestión de personajes (puede mantenerlo temporalmente)
+ * - components/campaigns.tsx: Algunas referencias residuales (deberían eliminarse)
+ * - components/shopping-cart.tsx: Carrito de compras
+ * - components/locations-map.tsx: Mapa de ubicaciones
+ * - app/shop-items/[shopId]/page.tsx: Página de tienda
+ * 
+ * Para nuevas funcionalidades, usar:
+ * - CampaignService.getPlayerCharacterInCampaign() para obtener el personaje en una campaña
+ * - Pasar characterId como prop a los componentes de jugador
+ */
+
 import { createContext, useContext, useState, useEffect, type ReactNode } from "react"
 import { createBrowserClient } from "@/lib/supabase/client"
 import { useAuth } from "@/lib/auth-context"
@@ -123,6 +139,9 @@ export function ActiveCharacterProvider({ children }: { children: ReactNode }) {
   )
 }
 
+/**
+ * @deprecated Usar CampaignService.getPlayerCharacterInCampaign() y pasar characterId como prop
+ */
 export function useActiveCharacter() {
   const context = useContext(ActiveCharacterContext)
   if (context === undefined) {

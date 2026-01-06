@@ -72,12 +72,13 @@ type MarketplaceTranslation = typeof translations["en"]["marketplace"]
 
 interface LocationsMapProps {
   language: Language
+  campaignId?: string // Opcional: si se proporciona, filtrar por esta campaña
 }
 
 const getLocationTypeLabel = (type: LocationType, map?: MarketplaceTranslation) => map?.locationTypes?.[type] || type
 const getShopTypeLabel = (type: ShopType, map?: MarketplaceTranslation) => map?.shopTypes?.[type] || type
 
-export function LocationsMap({ language }: LocationsMapProps) {
+export function LocationsMap({ language, campaignId: propCampaignId }: LocationsMapProps) {
   const t = translations[language]
   const router = useRouter()
   const supabase = createBrowserClient()
@@ -86,7 +87,7 @@ export function LocationsMap({ language }: LocationsMapProps) {
   const { toast } = useToast()
 
   const [campaigns, setCampaigns] = useState<CampaignEntry[]>([])
-  const [selectedCampaignId, setSelectedCampaignId] = useState<string>("")
+  const [selectedCampaignId, setSelectedCampaignId] = useState<string>(propCampaignId || "")
   const [locations, setLocations] = useState<LocationRow[]>([])
   const [selectedLocationId, setSelectedLocationId] = useState<string>("")
   const [shops, setShops] = useState<ShopRow[]>([])
@@ -136,6 +137,13 @@ export function LocationsMap({ language }: LocationsMapProps) {
   const isGm = activeCampaign?.role === "game_master"
 
   useEffect(() => {
+    // Si hay propCampaignId, no necesitamos cargar la lista de campañas
+    if (propCampaignId) {
+      // Validar y cargar datos directamente
+      validateAndLoadCampaignData()
+      return
+    }
+
     if (user) {
       loadCampaigns()
     } else {
@@ -146,10 +154,11 @@ export function LocationsMap({ language }: LocationsMapProps) {
       setShops([])
       setStandaloneNpcs([])
     }
-  }, [user, activeCharacterId]) // Recargar campañas cuando cambia el personaje activo
+  }, [user, activeCharacterId, propCampaignId]) // Recargar campañas cuando cambia el personaje activo o propCampaignId
 
   useEffect(() => {
-    if (selectedCampaignId && user) {
+    const campaignIdToUse = propCampaignId || selectedCampaignId
+    if (campaignIdToUse && user) {
       // Validar acceso antes de cargar datos
       validateAndLoadCampaignData()
     } else {
@@ -160,7 +169,7 @@ export function LocationsMap({ language }: LocationsMapProps) {
       setSelectedShopId("")
       setStandaloneNpcs([])
     }
-  }, [selectedCampaignId, user])
+  }, [selectedCampaignId, propCampaignId, user])
 
   useEffect(() => {
     if (selectedLocationId) {
@@ -201,26 +210,45 @@ export function LocationsMap({ language }: LocationsMapProps) {
   }
 
   // Función helper para validar acceso a una campaña
+  // Considera character_id para players, pero permite acceso como GM sin character_id
   const validateCampaignAccess = async (campaignId: string): Promise<{ hasAccess: boolean; role?: "game_master" | "player" }> => {
     if (!user || !campaignId) {
       return { hasAccess: false }
     }
 
     try {
-      const { data, error } = await supabase
+      // Primero verificar si es GM (no requiere character_id)
+      const { data: gmMember, error: gmError } = await supabase
         .from("campaign_members")
-        .select("role")
+        .select("role, character_id")
         .eq("campaign_id", campaignId)
         .eq("user_id", user.id)
+        .eq("role", "game_master")
+        .is("character_id", null)
         .maybeSingle()
 
-      if (error) {
-        console.error("[v0] LocationsMap: Error validating campaign access:", error)
-        return { hasAccess: false }
+      if (gmError) {
+        console.error("[v0] LocationsMap: Error validating GM access:", gmError)
+      } else if (gmMember) {
+        return { hasAccess: true, role: "game_master" }
       }
 
-      if (data) {
-        return { hasAccess: true, role: data.role as "game_master" | "player" }
+      // Si no es GM, verificar si es player con el personaje activo
+      if (activeCharacterId) {
+        const { data: playerMember, error: playerError } = await supabase
+          .from("campaign_members")
+          .select("role, character_id")
+          .eq("campaign_id", campaignId)
+          .eq("user_id", user.id)
+          .eq("role", "player")
+          .eq("character_id", activeCharacterId)
+          .maybeSingle()
+
+        if (playerError) {
+          console.error("[v0] LocationsMap: Error validating player access:", playerError)
+        } else if (playerMember) {
+          return { hasAccess: true, role: "player" }
+        }
       }
 
       return { hasAccess: false }
@@ -394,17 +422,18 @@ export function LocationsMap({ language }: LocationsMapProps) {
   }
 
   const loadLocations = async () => {
-    if (!selectedCampaignId || !user) {
+    const campaignIdToUse = propCampaignId || selectedCampaignId
+    if (!campaignIdToUse || !user) {
       setLocations([])
       return
     }
 
     // Extraer el ID real de la campaña
-    const realCampaignId = getRealCampaignId(selectedCampaignId)
+    const realCampaignId = getRealCampaignId(campaignIdToUse)
 
     // Verificar si la campaña está en la lista antes de validar
     // Si está en la lista, confiar en que es válida (ya fue filtrada por user_id)
-    const campaignExists = campaigns.some((c) => c.displayId === selectedCampaignId || c.id === selectedCampaignId)
+    const campaignExists = campaigns.some((c) => c.displayId === campaignIdToUse || c.id === campaignIdToUse)
     if (!campaignExists) {
       // Solo validar si no está en la lista (caso edge)
       const access = await validateCampaignAccess(realCampaignId)
@@ -553,17 +582,18 @@ export function LocationsMap({ language }: LocationsMapProps) {
   }
 
   const loadStandaloneNpcs = async () => {
-    if (!selectedCampaignId || !user) {
+    const campaignIdToUse = propCampaignId || selectedCampaignId
+    if (!campaignIdToUse || !user) {
       setStandaloneNpcs([])
       return
     }
 
     // Extraer el ID real de la campaña
-    const realCampaignId = getRealCampaignId(selectedCampaignId)
+    const realCampaignId = getRealCampaignId(campaignIdToUse)
 
     // Verificar si la campaña está en la lista antes de validar
     // Si está en la lista, confiar en que es válida (ya fue filtrada por user_id)
-    const campaignExists = campaigns.some((c) => c.displayId === selectedCampaignId || c.id === selectedCampaignId)
+    const campaignExists = campaigns.some((c) => c.displayId === campaignIdToUse || c.id === campaignIdToUse)
     if (!campaignExists) {
       // Solo validar si no está en la lista (caso edge)
       const access = await validateCampaignAccess(realCampaignId)
@@ -857,68 +887,69 @@ export function LocationsMap({ language }: LocationsMapProps) {
   const selectedLocation = locations.find((location) => location.id === selectedLocationId)
 
   return (
-    <div className="w-full max-w-7xl mx-auto space-y-6">
-      {/* Header */}
-      <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="text-3xl font-bold flex items-center gap-2 text-foreground">
-              <MapPin className="w-8 h-8" />
-              {t.marketplace?.mapTitle || t.sidebar.map || "Mapa"}
-            </h2>
-            <p className="text-muted-foreground mt-1">
-              {t.marketplace?.mapDescription || "Visualiza las ubicaciones y conecta tus tiendas."}
-            </p>
-          </div>
-        </div>
+    <Card className="w-full max-w-6xl">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <MapPin className="w-6 h-6" />
+          {t.marketplace?.mapTitle || t.sidebar.map || "Mapa"}
+        </CardTitle>
+        <CardDescription>
+          {t.marketplace?.mapDescription || "Visualiza las ubicaciones y conecta tus tiendas."}
+        </CardDescription>
+      </CardHeader>
 
-        {/* Campaign Selector */}
-        <div className="flex flex-col gap-2">
-          {campaignsList.length === 0 ? (
-            <p className="text-sm text-muted-foreground">{t.marketplace?.noCampaigns || "Join a campaign to see the map."}</p>
-          ) : (
-            <Select
-              value={selectedCampaignId}
-              onValueChange={async (value) => {
-                // Verificar que la campaña esté en la lista
-                // El selector solo muestra campañas de la lista, pero mantener validación por seguridad
-                if (value && user) {
-                  const campaignExists = campaignsList.some((c) => c.displayId === value || c.id === value)
-                  if (!campaignExists) {
-                    // Solo validar si no está en la lista (no debería pasar normalmente)
-                    // Extraer el ID real de la campaña del displayId si es necesario
-                    const campaignId = value.includes("_") ? value.split("_")[0] : value
-                    const access = await validateCampaignAccess(campaignId)
-                    if (!access.hasAccess) {
-                      toast({
-                        title: t.inventory?.error || "Error",
-                        description: "No tienes acceso a esta campaña",
-                        variant: "destructive",
-                      })
-                      return
+      <CardContent>
+        {/* Campaign Selector - Solo mostrar si no hay propCampaignId */}
+        {!propCampaignId && (
+          <div className="mb-6">
+            {campaignsList.length === 0 ? (
+              <p className="text-sm text-muted-foreground">{t.marketplace?.noCampaigns || "Join a campaign to see the map."}</p>
+            ) : (
+              <div className="space-y-2">
+              <Label>{t.campaigns?.selectCampaign || "Select Campaign"}</Label>
+              <Select
+                value={selectedCampaignId}
+                onValueChange={async (value) => {
+                  // Verificar que la campaña esté en la lista
+                  // El selector solo muestra campañas de la lista, pero mantener validación por seguridad
+                  if (value && user) {
+                    const campaignExists = campaignsList.some((c) => c.displayId === value || c.id === value)
+                    if (!campaignExists) {
+                      // Solo validar si no está en la lista (no debería pasar normalmente)
+                      // Extraer el ID real de la campaña del displayId si es necesario
+                      const campaignId = value.includes("_") ? value.split("_")[0] : value
+                      const access = await validateCampaignAccess(campaignId)
+                      if (!access.hasAccess) {
+                        toast({
+                          title: t.inventory?.error || "Error",
+                          description: "No tienes acceso a esta campaña",
+                          variant: "destructive",
+                        })
+                        return
+                      }
                     }
                   }
-                }
-                setSelectedCampaignId(value)
-              }}
-            >
-              <SelectTrigger className="w-full max-w-md">
-                <SelectValue placeholder={t.marketplace?.selectCampaign || "Select a campaign"} />
-              </SelectTrigger>
-              <SelectContent>
-                {campaignsList.map((campaign) => (
-                  <SelectItem key={campaign.displayId} value={campaign.displayId}>
-                    {campaign.name} {campaign.role === "game_master" ? "· GM" : "· Jugador"}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+                  setSelectedCampaignId(value)
+                }}
+              >
+                <SelectTrigger className="w-full max-w-md">
+                  <SelectValue placeholder={t.marketplace?.selectCampaign || "Select a campaign"} />
+                </SelectTrigger>
+                <SelectContent>
+                  {campaignsList.map((campaign) => (
+                    <SelectItem key={campaign.displayId} value={campaign.displayId}>
+                      {campaign.name} {campaign.role === "game_master" ? "· GM" : "· Jugador"}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           )}
-        </div>
-      </div>
+          </div>
+        )}
 
-      {/* Main Content with Tabs */}
-      <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as "locations" | "shops" | "npcs")} className="w-full">
+        {/* Main Content with Tabs */}
+        <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as "locations" | "shops" | "npcs")} className="w-full">
         <TabsList className="grid w-full grid-cols-3 max-w-2xl">
           <TabsTrigger value="locations">
             <MapPin className="w-4 h-4 mr-2" />
@@ -1264,6 +1295,7 @@ export function LocationsMap({ language }: LocationsMapProps) {
           )}
         </TabsContent>
       </Tabs>
+      </CardContent>
 
       <Dialog open={isLocationDialogOpen} onOpenChange={setIsLocationDialogOpen}>
         <DialogContent>
@@ -1467,6 +1499,6 @@ export function LocationsMap({ language }: LocationsMapProps) {
           </div>
         </DialogContent>
       </Dialog>
-    </div>
+    </Card>
   )
 }

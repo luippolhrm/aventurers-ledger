@@ -20,5 +20,15 @@ export interface ShopItemExtended {
   attunement?: boolean
   original_name_en?: string
   source?: 'manual'
+  // New fields for dynamic effects
+  equippable_slot?: string
+  wondrous_type?: string
+  effect_dice?: string
+  effect_type?: string
+  effect_target?: string
+  spell_level?: number
+  spell_name?: string
+  spell_school?: string
+  effect_description?: string
 }
 

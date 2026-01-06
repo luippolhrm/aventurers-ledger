@@ -3,7 +3,6 @@
 import type { ReactNode } from "react"
 import { useRouter, usePathname } from "next/navigation"
 import { Sidebar } from "@/components/sidebar"
-import { CharacterSelector } from "@/components/character-selector"
 import { UserMenu } from "@/components/user-menu"
 import { useLanguage } from "@/lib/language-context"
 
@@ -50,7 +49,6 @@ export function AppLayout({ children }: AppLayoutProps) {
       <div className="flex-1 flex flex-col">
         <header className="py-6 px-4 md:px-8 text-center border-b border-border relative">
           <div className="absolute top-4 right-4 flex items-center gap-3">
-            <CharacterSelector language={language} onNavigateToCharacters={() => handleModuleChange("characters")} />
             <UserMenu />
           </div>
 

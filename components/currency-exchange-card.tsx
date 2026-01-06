@@ -9,25 +9,10 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Label } from "@/components/ui/label"
 import { Coins, ArrowRightLeft } from "lucide-react"
 import { type Language, translations } from "@/lib/translations"
-
-type CurrencyType = "PP" | "GP" | "EP" | "SP" | "CP"
-
-interface Currency {
-  id: CurrencyType
-  text: string
-  valueInCP: number
-}
-
-const getCurrencies = (language: Language): Currency[] => {
-  const t = translations[language].currencies
-  return [
-    { id: "PP", text: t.platinum, valueInCP: 1000 },
-    { id: "GP", text: t.gold, valueInCP: 100 },
-    { id: "EP", text: t.electrum, valueInCP: 50 },
-    { id: "SP", text: t.silver, valueInCP: 10 },
-    { id: "CP", text: t.copper, valueInCP: 1 },
-  ]
-}
+import {
+  CurrencyConverterService,
+  type CurrencyType,
+} from "@/lib/application/services"
 
 interface CurrencyExchangeCardProps {
   language: Language
@@ -35,7 +20,8 @@ interface CurrencyExchangeCardProps {
 
 export function CurrencyExchangeCard({ language }: CurrencyExchangeCardProps) {
   const t = translations[language].card
-  const currencies = getCurrencies(language)
+  const converterService = new CurrencyConverterService()
+  const currencies = converterService.getCurrencies(language)
 
   const [fromCurrency, setFromCurrency] = useState<CurrencyType>("GP")
   const [toCurrency, setToCurrency] = useState<CurrencyType>("SP")
@@ -50,15 +36,17 @@ export function CurrencyExchangeCard({ language }: CurrencyExchangeCardProps) {
       return
     }
 
-    const fromCurrencyData = currencies.find((c) => c.id === fromCurrency)
-    const toCurrencyData = currencies.find((c) => c.id === toCurrency)
-
-    if (!fromCurrencyData || !toCurrencyData) return
-
-    const amountInCP = inputAmount * fromCurrencyData.valueInCP
-    const convertedAmount = amountInCP / toCurrencyData.valueInCP
-
-    setResult(convertedAmount)
+    try {
+      const convertedAmount = converterService.convert(
+        inputAmount,
+        fromCurrency,
+        toCurrency
+      )
+      setResult(convertedAmount)
+    } catch (error) {
+      console.error("Error converting currency:", error)
+      setResult(null)
+    }
   }
 
   const getResultText = () => {
@@ -67,7 +55,7 @@ export function CurrencyExchangeCard({ language }: CurrencyExchangeCardProps) {
     const toCurrencyData = currencies.find((c) => c.id === toCurrency)
     const fromCurrencyData = currencies.find((c) => c.id === fromCurrency)
 
-    const displayResult = Number.isInteger(result) ? result.toString() : result.toFixed(2)
+    const displayResult = converterService.formatResult(result)
 
     return t.resultText(
       amount,
@@ -80,17 +68,18 @@ export function CurrencyExchangeCard({ language }: CurrencyExchangeCardProps) {
   }
 
   return (
-    <Card className="w-full max-w-[600px] shadow-xl">
-      <CardHeader className="text-center space-y-2">
-        <div className="flex justify-center mb-2">
-          <div className="p-3 rounded-full bg-primary/10">
-            <Coins className="h-8 w-8 text-primary" />
+    <div className="w-full max-w-7xl mx-auto p-4 md:p-6 flex items-center justify-center">
+      <Card className="w-full max-w-[600px] shadow-xl">
+        <CardHeader className="text-center space-y-2 p-4 md:p-6">
+          <div className="flex justify-center mb-2">
+            <div className="p-2 md:p-3 rounded-full bg-primary/10">
+              <Coins className="h-6 w-6 md:h-8 md:w-8 text-primary" />
+            </div>
           </div>
-        </div>
-        <CardTitle className="text-2xl md:text-3xl">{t.title}</CardTitle>
-        <CardDescription className="text-base">{t.description}</CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-6">
+          <CardTitle className="text-xl md:text-2xl lg:text-3xl">{t.title}</CardTitle>
+          <CardDescription className="text-sm md:text-base">{t.description}</CardDescription>
+        </CardHeader>
+        <CardContent className="p-4 md:p-6 space-y-4 md:space-y-6">
         <div className="flex gap-4">
           <div className="flex-1 space-y-2">
             <Label htmlFor="from-currency">{t.fromCurrency}</Label>
@@ -170,6 +159,7 @@ export function CurrencyExchangeCard({ language }: CurrencyExchangeCardProps) {
           </Alert>
         )}
       </CardContent>
-    </Card>
+      </Card>
+    </div>
   )
 }

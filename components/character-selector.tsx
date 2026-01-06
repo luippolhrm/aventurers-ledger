@@ -15,13 +15,7 @@ import { createBrowserClient } from "@/lib/supabase/client"
 import { useActiveCharacter } from "@/lib/active-character-context"
 import { useAuth } from "@/lib/auth-context"
 import { type Language, translations } from "@/lib/translations"
-
-interface Character {
-  id: string
-  name: string
-  race: string
-  archived: boolean
-}
+import type { Character } from "@/lib/infrastructure/repositories"
 
 interface CharacterSelectorProps {
   language: Language

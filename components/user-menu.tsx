@@ -2,7 +2,7 @@
 
 import { useAuth } from "@/lib/auth-context"
 import { useLanguage } from "@/lib/language-context"
-import { createBrowserClient } from "@/lib/supabase/client"
+import { useServices } from "@/hooks/use-services"
 import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
@@ -20,13 +20,19 @@ export function UserMenu() {
   const { user } = useAuth()
   const { t } = useLanguage()
   const router = useRouter()
+  const services = useServices()
 
   if (!user) return null
 
   const handleLogout = async () => {
-    const supabase = createBrowserClient()
-    await supabase.auth.signOut()
-    router.push("/auth/login")
+    try {
+      await services.auth.signOut()
+      router.push("/auth/login")
+    } catch (error) {
+      console.error("Error signing out:", error)
+      // Redirect anyway
+      router.push("/auth/login")
+    }
   }
 
   const getUserInitials = () => {

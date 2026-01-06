@@ -8,10 +8,11 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { MapPin, Plus, Trash2 } from "lucide-react"
-import { createBrowserClient } from "@/lib/supabase/client"
 import { useAuth } from "@/lib/auth-context"
 import { type Language, translations } from "@/lib/translations"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { useServices } from "@/hooks/use-services"
+import { ErrorService } from "@/lib/infrastructure/errors"
 
 interface Location {
   id: string
@@ -35,7 +36,7 @@ interface LocationsProps {
 export function Locations({ language, campaignId, onSelectLocation }: LocationsProps) {
   const t = translations[language]
   const { user } = useAuth()
-  const supabase = createBrowserClient()
+  const services = useServices()
 
   const [locations, setLocations] = useState<Location[]>([])
   const [campaigns, setCampaigns] = useState<Campaign[]>([])
@@ -62,32 +63,6 @@ export function Locations({ language, campaignId, onSelectLocation }: LocationsP
     }
   }, [selectedCampaignId, user])
 
-  // Función helper para validar acceso a una campaña
-  const validateCampaignAccess = async (campaignId: string): Promise<boolean> => {
-    if (!user || !campaignId) {
-      return false
-    }
-
-    try {
-      const { data, error } = await supabase
-        .from("campaign_members")
-        .select("role")
-        .eq("campaign_id", campaignId)
-        .eq("user_id", user.id)
-        .maybeSingle()
-
-      if (error) {
-        console.error("[v0] Locations: Error validating campaign access:", error)
-        return false
-      }
-
-      return !!data
-    } catch (err) {
-      console.error("[v0] Locations: Exception validating campaign access:", err)
-      return false
-    }
-  }
-
   const loadCampaigns = async () => {
     if (!user) {
       setCampaigns([])
@@ -95,39 +70,19 @@ export function Locations({ language, campaignId, onSelectLocation }: LocationsP
     }
 
     try {
-      const { data: memberData, error: memberError } = await supabase
-        .from("campaign_members")
-        .select("campaign_id")
-        .eq("user_id", user.id)
-
-      if (memberError) {
-        console.error("[v0] Locations: Error loading campaign members:", memberError)
-        return
-      }
-
-      if (memberData && memberData.length > 0) {
-        const campaignIds = memberData.map((m) => m.campaign_id)
-        const { data: campaignsData, error: campaignsError } = await supabase
-          .from("campaigns")
-          .select("id, name")
-          .in("id", campaignIds)
-
-        if (campaignsError) {
-          console.error("[v0] Locations: Error loading campaigns:", campaignsError)
-          return
-        }
-
-        if (campaignsData) {
-          setCampaigns(campaignsData)
-          if (campaignsData.length > 0 && !selectedCampaignId) {
-            setSelectedCampaignId(campaignsData[0].id)
-          }
-        }
-      } else {
-        setCampaigns([])
+      const userCampaigns = await services.campaign.getUserCampaigns(user.id)
+      setCampaigns(
+        userCampaigns.map((campaign) => ({
+          id: campaign.id,
+          name: campaign.name,
+        }))
+      )
+      if (userCampaigns.length > 0 && !selectedCampaignId) {
+        setSelectedCampaignId(userCampaigns[0].id)
       }
     } catch (err) {
       console.error("[v0] Locations: Exception loading campaigns:", err)
+      setCampaigns([])
     }
   }
 
@@ -137,56 +92,73 @@ export function Locations({ language, campaignId, onSelectLocation }: LocationsP
       return
     }
 
-    // Validar acceso antes de cargar
-    const hasAccess = await validateCampaignAccess(selectedCampaignId)
-    if (!hasAccess) {
-      console.error("[v0] Locations: Cannot load locations - no access to campaign:", selectedCampaignId)
-      setLocations([])
-      return
-    }
-
-    const { data, error } = await supabase
-      .from("locations")
-      .select("*")
-      .eq("campaign_id", selectedCampaignId)
-      .order("created_at", { ascending: false })
-
-    if (error) {
+    try {
+      const locationsData = await services.location.getLocationsByCampaign(selectedCampaignId)
+      setLocations(
+        locationsData.map((location) => ({
+          id: location.id,
+          name: location.name,
+          description: location.description,
+          campaign_id: location.campaign_id,
+          created_at: location.created_at,
+        }))
+      )
+    } catch (error) {
       console.error("[v0] Locations: Error loading locations:", error)
       setLocations([])
-      return
     }
-
-    setLocations(data || [])
   }
 
   const handleCreateLocation = async () => {
-    if (!newLocationName.trim() || !selectedCampaignId) return
+    if (!newLocationName.trim() || !selectedCampaignId || !user) return
 
     setIsLoading(true)
-    const { data, error } = await supabase
-      .from("locations")
-      .insert({
-        name: newLocationName,
-        description: newLocationDescription,
-        campaign_id: selectedCampaignId,
-      })
-      .select()
+    try {
+      const newLocation = await services.location.createLocation(
+        {
+          name: newLocationName,
+          description: newLocationDescription || null,
+          campaign_id: selectedCampaignId,
+        },
+        user.id
+      )
 
-    if (!error && data) {
-      setLocations([data[0], ...locations])
+      setLocations([
+        {
+          id: newLocation.id,
+          name: newLocation.name,
+          description: newLocation.description,
+          campaign_id: newLocation.campaign_id,
+          created_at: newLocation.created_at,
+        },
+        ...locations,
+      ])
       setNewLocationName("")
       setNewLocationDescription("")
       setIsCreateDialogOpen(false)
+    } catch (error) {
+      console.error("[v0] Locations: Error creating location:", error)
+      const errorMessage =
+        error instanceof Error
+          ? error.message
+          : ErrorService.fromUnknownError(error).message
+      alert(errorMessage || "Error creating location")
+    } finally {
+      setIsLoading(false)
     }
-    setIsLoading(false)
   }
 
   const handleDeleteLocation = async (locationId: string) => {
-    const { error } = await supabase.from("locations").delete().eq("id", locationId)
-
-    if (!error) {
+    try {
+      await services.location.deleteLocation(locationId)
       setLocations(locations.filter((l) => l.id !== locationId))
+    } catch (error) {
+      console.error("[v0] Locations: Error deleting location:", error)
+      const errorMessage =
+        error instanceof Error
+          ? error.message
+          : ErrorService.fromUnknownError(error).message
+      alert(errorMessage || "Error deleting location")
     }
   }
 
@@ -208,15 +180,7 @@ export function Locations({ language, campaignId, onSelectLocation }: LocationsP
             <Label>{t.campaigns?.selectCampaign || "Select Campaign"}</Label>
             <Select
               value={selectedCampaignId}
-              onValueChange={async (value) => {
-                // Validar acceso antes de cambiar la campaña seleccionada
-                if (value && user) {
-                  const hasAccess = await validateCampaignAccess(value)
-                  if (!hasAccess) {
-                    console.error("[v0] Locations: User does not have access to campaign:", value)
-                    return
-                  }
-                }
+              onValueChange={(value) => {
                 setSelectedCampaignId(value)
               }}
             >

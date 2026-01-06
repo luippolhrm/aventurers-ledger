@@ -8,12 +8,15 @@ import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { type Language, translations } from "@/lib/translations"
-import { Coins, Plus, Minus, User } from "lucide-react"
-import { createBrowserClient } from "@/lib/supabase/client"
-import { useActiveCharacter } from "@/lib/active-character-context"
+import { Coins, Plus, Minus } from "lucide-react"
+import { useServices } from "@/hooks/use-services"
+import { ErrorService } from "@/lib/infrastructure/errors"
+import { CharacterService } from "@/lib/application/services/character-service"
+import type { Character } from "@/lib/infrastructure/repositories/character-repository"
 
 interface WalletManagerProps {
   language: Language
+  characterId: string
 }
 
 type CurrencyType = "PP" | "GP" | "EP" | "SP" | "CP"
@@ -26,85 +29,93 @@ interface Wallet {
   CP: number
 }
 
-export function WalletManager({ language }: WalletManagerProps) {
+export function WalletManager({ language, characterId }: WalletManagerProps) {
   const t = translations[language]
-  const { activeCharacter } = useActiveCharacter()
+  const services = useServices()
+  const characterService = new CharacterService()
+  const [character, setCharacter] = useState<Character | null>(null)
   const [wallet, setWallet] = useState<Wallet>({ PP: 0, GP: 0, EP: 0, SP: 0, CP: 0 })
   const [currency, setCurrency] = useState<CurrencyType>("GP")
   const [amount, setAmount] = useState("")
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [totalWealth, setTotalWealth] = useState<number>(0)
-  const supabase = createBrowserClient()
 
   useEffect(() => {
-    if (activeCharacter) {
+    if (characterId) {
+      loadCharacter()
       loadWalletFromSupabase()
     } else {
       setWallet({ PP: 0, GP: 0, EP: 0, SP: 0, CP: 0 })
       setTotalWealth(0)
+      setCharacter(null)
     }
-  }, [activeCharacter])
+  }, [characterId])
+
+  const loadCharacter = async () => {
+    if (!characterId) return
+    try {
+      const char = await characterService.getCharacter(characterId)
+      setCharacter(char)
+    } catch (error) {
+      console.error("Error loading character:", error)
+      setCharacter(null)
+    }
+  }
 
   const loadWalletFromSupabase = async () => {
-    if (!activeCharacter) return
+    if (!characterId) return
 
     setIsLoading(true)
     try {
       // El wallet se crea automáticamente mediante trigger al crear el personaje
       // Si no existe, esperar un poco y reintentar (el trigger puede estar procesando)
       let retries = 3
-      let data = null
-      let error = null
+      let walletData = null
 
       while (retries > 0) {
-        const result = await supabase
-          .from("wallets")
-          .select("*")
-          .eq("character_id", activeCharacter.id)
-          .maybeSingle()
-        
-        data = result.data
-        error = result.error
-
-        if (data) {
-          // Wallet encontrado, salir del loop
-          break
+        try {
+          walletData = await services.wallet.getWallet(characterId)
+          if (walletData) {
+            break
+          }
+        } catch (error: any) {
+          // Si es un error de "not found", continuar con reintentos
+          if (error?.code !== "NOT_FOUND" && error?.code !== "PGRST116") {
+            throw error
+          }
         }
 
-        if (error && error.code !== "PGRST116") {
-          // Error diferente a "no encontrado", salir
-          break
-        }
-
-        // Wallet no encontrado, esperar un poco antes de reintentar
         retries--
         if (retries > 0) {
           await new Promise((resolve) => setTimeout(resolve, 500)) // Esperar 500ms
         }
       }
 
-      if (data) {
+      if (walletData) {
         setWallet({
-          PP: data.platinum,
-          GP: data.gold,
-          EP: data.electrum,
-          SP: data.silver,
-          CP: data.copper,
+          PP: walletData.platinum,
+          GP: walletData.gold,
+          EP: walletData.electrum,
+          SP: walletData.silver,
+          CP: walletData.copper,
         })
-        setTotalWealth(Number.parseFloat(data.total_wealth) || 0)
+        // Calcular el total en copper y convertir a gold
+        const totalInCopper = services.wallet.calculateTotalInCopper(walletData)
+        const totalInGold = services.wallet.convertCurrency(totalInCopper, "CP", "GP")
+        setTotalWealth(totalInGold)
       } else {
         // Si después de los reintentos aún no existe, inicializar con valores por defecto
-        // El trigger debería haberlo creado, pero por si acaso
         setWallet({ PP: 0, GP: 0, EP: 0, SP: 0, CP: 0 })
         setTotalWealth(0)
-        if (error && error.code !== "PGRST116") {
-          throw error
-        }
       }
     } catch (error) {
       console.error("Error loading wallet:", error)
-      setMessage({ type: "error", text: "Error loading wallet from database" })
+      const errorMessage =
+        error instanceof Error
+          ? error.message
+          : ErrorService.fromUnknownError(error).message
+      setMessage({ type: "error", text: errorMessage || "Error loading wallet from database" })
     } finally {
       setIsLoading(false)
     }
@@ -117,60 +128,41 @@ export function WalletManager({ language }: WalletManagerProps) {
     amount: number,
   ) => {
     try {
-      if (!activeCharacter) {
-        throw new Error("No active character")
+      if (!characterId) {
+        throw new Error("No character ID provided")
       }
 
-      const { data, error } = await supabase
-        .from("wallets")
-        .update({
-          platinum: updatedWallet.PP,
-          gold: updatedWallet.GP,
-          electrum: updatedWallet.EP,
-          silver: updatedWallet.SP,
-          copper: updatedWallet.CP,
-        })
-        .eq("character_id", activeCharacter.id)
-        .select()
-        .single()
+      // Actualizar wallet usando WalletService
+      await services.wallet.updateWallet(characterId, {
+        platinum: updatedWallet.PP,
+        gold: updatedWallet.GP,
+        electrum: updatedWallet.EP,
+        silver: updatedWallet.SP,
+        copper: updatedWallet.CP,
+      })
 
-      if (error) throw error
-
-      await supabase
-        .from("movements")
-        .insert({
-          character_id: activeCharacter.id,
-          from_currency: currency,
-          to_currency: currency,
-          amount_from: amount,
-          amount_to: amount,
-          movement_type: movementType,
-        })
-        .catch((err) => {
-          console.error("Error recording movement:", err)
-        })
-
-      const currencyValues: Record<CurrencyType, number> = {
-        PP: 1000,
-        GP: 100,
-        EP: 50,
-        SP: 10,
-        CP: 1,
+      // Crear movimiento usando MovementService
+      if (movementType === "add") {
+        await services.movement.createAdd(characterId, currency, amount)
+      } else {
+        await services.movement.createRemove(characterId, currency, amount)
       }
 
-      const totalInCP =
-        updatedWallet.PP * currencyValues.PP +
-        updatedWallet.GP * currencyValues.GP +
-        updatedWallet.EP * currencyValues.EP +
-        updatedWallet.SP * currencyValues.SP +
-        updatedWallet.CP * currencyValues.CP
-
-      const totalInGP = totalInCP / 100
-      setTotalWealth(totalInGP)
+      // Recalcular total - obtener wallet actualizado y calcular
+      const walletData = await services.wallet.getWallet(characterId)
+      if (walletData) {
+        const totalInCopper = services.wallet.calculateTotalInCopper(walletData)
+        const totalInGold = services.wallet.convertCurrency(totalInCopper, "CP", "GP")
+        setTotalWealth(totalInGold)
+      }
       setMessage({ type: "success", text: t.wallet.success })
     } catch (error) {
       console.error("Error saving wallet:", error)
-      setMessage({ type: "error", text: "Error saving wallet to database" })
+      const errorMessage =
+        error instanceof Error
+          ? error.message
+          : ErrorService.fromUnknownError(error).message
+      setMessage({ type: "error", text: errorMessage || "Error saving wallet to database" })
       throw error
     }
   }
@@ -185,7 +177,7 @@ export function WalletManager({ language }: WalletManagerProps) {
 
   const handleAdd = async () => {
     const amt = Number.parseFloat(amount)
-    if (isNaN(amt) || amt <= 0) {
+    if (isNaN(amt) || amt <= 0 || !Number.isFinite(amt)) {
       setMessage({ type: "error", text: t.wallet.error })
       return
     }
@@ -193,7 +185,7 @@ export function WalletManager({ language }: WalletManagerProps) {
     setIsLoading(true)
     try {
       const updatedWallet = { ...wallet, [currency]: wallet[currency] + amt }
-      console.log("[v0] Saving wallet:", { character: activeCharacter?.id, updatedWallet, currency, amt })
+      console.log("[v0] Saving wallet:", { character: characterId, updatedWallet, currency, amt })
 
       await saveWalletToSupabase(updatedWallet, "add", currency, amt)
       setWallet(updatedWallet)
@@ -209,7 +201,7 @@ export function WalletManager({ language }: WalletManagerProps) {
 
   const handleRemove = async () => {
     const amt = Number.parseFloat(amount)
-    if (isNaN(amt) || amt <= 0) {
+    if (isNaN(amt) || amt <= 0 || !Number.isFinite(amt)) {
       setMessage({ type: "error", text: t.wallet.error })
       return
     }
@@ -222,7 +214,7 @@ export function WalletManager({ language }: WalletManagerProps) {
     setIsLoading(true)
     try {
       const updatedWallet = { ...wallet, [currency]: wallet[currency] - amt }
-      console.log("[v0] Removing wallet:", { character: activeCharacter?.id, updatedWallet, currency, amt })
+      console.log("[v0] Removing wallet:", { character: characterId, updatedWallet, currency, amt })
 
       await saveWalletToSupabase(updatedWallet, "remove", currency, amt)
       setWallet(updatedWallet)
@@ -236,64 +228,51 @@ export function WalletManager({ language }: WalletManagerProps) {
     }
   }
 
-  const hasCharacter = !!activeCharacter
+  const hasCharacter = !!characterId && !!character
 
   return (
-    <Card className="w-full max-w-2xl shadow-lg">
-      <CardHeader className="text-center border-b">
-        <CardTitle className="text-2xl bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
-          {t.wallet.title}
-        </CardTitle>
-        <CardDescription>{t.wallet.description}</CardDescription>
-      </CardHeader>
-      <CardContent className="pt-6 space-y-6">
-        {hasCharacter && activeCharacter && (
-          <div className="bg-accent/20 rounded-lg p-4 border border-accent/30">
-            <div className="flex items-center gap-3">
-              <div className="bg-accent/30 p-2 rounded-full">
-                <User className="w-5 h-5 text-accent-foreground" />
+    <div className="w-full max-w-7xl mx-auto space-y-4 md:space-y-6">
+      <Card className="w-full shadow-sm">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-lg md:text-xl flex items-center gap-2">
+            <Coins className="w-4 h-4 md:w-5 md:h-5" />
+            {t.wallet.title}
+          </CardTitle>
+          <CardDescription className="text-xs md:text-sm">{t.wallet.description}</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4 md:space-y-6">
+          <div className="space-y-2 md:space-y-3">
+            <h3 className="font-semibold text-base md:text-lg">{t.wallet.balance}</h3>
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2 md:gap-3">
+              {currencies.map((curr) => (
+                <div
+                  key={curr.id}
+                  className="bg-muted rounded-lg p-2 md:p-3 text-center border border-border hover:border-primary transition-colors"
+                >
+                  <div className="text-xs text-muted-foreground mb-1">{curr.id}</div>
+                  <div className="font-bold text-base md:text-lg">{wallet[curr.id as CurrencyType]}</div>
+                  <div className="text-xs text-muted-foreground mt-1">{curr.name}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="bg-primary/10 rounded-lg p-3 md:p-4 border border-primary/20">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Coins className="w-4 h-4 md:w-5 md:h-5 text-primary" />
+                <span className="font-semibold text-sm md:text-base">{t.wallet.totalWealth}</span>
               </div>
-              <div>
-                <div className="text-sm text-muted-foreground">{t.wallet.managingWallet}</div>
-                <div className="font-semibold text-lg">{activeCharacter.name}</div>
-                <div className="text-sm text-muted-foreground">{activeCharacter.race}</div>
+              <div className="text-right">
+                <div className="text-xl md:text-2xl font-bold text-primary">
+                  {Number.isInteger(totalWealth) ? totalWealth : totalWealth.toFixed(2)}
+                </div>
+                <div className="text-xs text-muted-foreground">{t.wallet.totalInGold}</div>
               </div>
             </div>
           </div>
-        )}
 
-        <div className="space-y-3">
-          <h3 className="font-semibold text-lg">{t.wallet.balance}</h3>
-          <div className="grid grid-cols-5 gap-3">
-            {currencies.map((curr) => (
-              <div
-                key={curr.id}
-                className="bg-muted rounded-lg p-3 text-center border border-border hover:border-primary transition-colors"
-              >
-                <div className="text-xs text-muted-foreground mb-1">{curr.id}</div>
-                <div className="font-bold text-lg">{wallet[curr.id as CurrencyType]}</div>
-                <div className="text-xs text-muted-foreground mt-1">{curr.name}</div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <div className="bg-primary/10 rounded-lg p-4 border border-primary/20">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Coins className="w-5 h-5 text-primary" />
-              <span className="font-semibold">{t.wallet.totalWealth}</span>
-            </div>
-            <div className="text-right">
-              <div className="text-2xl font-bold text-primary">
-                {Number.isInteger(totalWealth) ? totalWealth : totalWealth.toFixed(2)}
-              </div>
-              <div className="text-xs text-muted-foreground">{t.wallet.totalInGold}</div>
-            </div>
-          </div>
-        </div>
-
-        <div className="space-y-4">
+          <div className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="wallet-currency">{t.wallet.currency}</Label>
@@ -351,12 +330,13 @@ export function WalletManager({ language }: WalletManagerProps) {
           </div>
         </div>
 
-        {message && (
-          <Alert variant={message.type === "error" ? "destructive" : "default"}>
-            <AlertDescription>{message.text}</AlertDescription>
-          </Alert>
-        )}
-      </CardContent>
-    </Card>
+          {message && (
+            <Alert variant={message.type === "error" ? "destructive" : "default"}>
+              <AlertDescription className="text-sm md:text-base">{message.text}</AlertDescription>
+            </Alert>
+          )}
+        </CardContent>
+      </Card>
+    </div>
   )
 }

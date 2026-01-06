@@ -7,12 +7,13 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { ShoppingCart, ShoppingBag } from "lucide-react"
-import { createBrowserClient } from "@/lib/supabase/client"
 import { useAuth } from "@/lib/auth-context"
 import { type Language, translations } from "@/lib/translations"
 import { useShoppingCart } from "@/hooks/use-shopping-cart"
 import { useToast } from "@/hooks/use-toast"
 import { formatPriceInGold } from "@/lib/utils"
+import { useServices } from "@/hooks/use-services"
+import { ErrorService } from "@/lib/infrastructure/errors"
 
 interface ShopItem {
   id: string
@@ -41,7 +42,7 @@ interface ShopCatalogProps {
 
 export function ShopCatalog({ language, shopId, characterId, isGm }: ShopCatalogProps) {
   const t = translations[language]
-  const supabase = createBrowserClient()
+  const services = useServices()
   const { user } = useAuth()
   const { addItem, itemCount } = useShoppingCart(shopId)
   const { toast } = useToast()
@@ -57,15 +58,33 @@ export function ShopCatalog({ language, shopId, characterId, isGm }: ShopCatalog
   }, [shopId])
 
   const loadCatalog = async () => {
-    const { data, error } = await supabase
-      .from("shop_items")
-      .select("*")
-      .eq("shop_id", shopId)
-      .gt("quantity_available", 0)
-      .order("item_name")
-
-    if (!error && data) {
-      setItems(data)
+    try {
+      const availableItems = await services.shopItem.getAvailableShopItems(shopId)
+      setItems(
+        availableItems.map((item) => ({
+          id: item.id,
+          item_name: item.item_name,
+          item_type: item.item_type,
+          description: item.description,
+          price_in_copper: item.price_in_copper,
+          weight: item.weight,
+          quantity_available: item.quantity_available,
+          image_url: item.image_url,
+          rarity: item.rarity,
+          item_category: item.item_category,
+        }))
+      )
+    } catch (error) {
+      console.error("[v0] ShopCatalog: Error loading catalog:", error)
+      const errorMessage =
+        error instanceof Error
+          ? error.message
+          : ErrorService.fromUnknownError(error).message
+      toast({
+        title: "Error",
+        description: errorMessage || "Failed to load shop catalog",
+        variant: "destructive",
+      })
     }
   }
 

@@ -34,21 +34,6 @@ export function Sidebar({ activeModule, onModuleChange, language, includeProfile
       icon: Map,
     },
     {
-      id: "finances",
-      name: t.sidebar.finances,
-      icon: DollarSign,
-    },
-    {
-      id: "inventory",
-      name: t.sidebar.inventory,
-      icon: Package,
-    },
-    {
-      id: "map",
-      name: t.sidebar.map,
-      icon: Store,
-    },
-    {
       id: "currency-converter",
       name: t.sidebar.currencyConverter,
       icon: Coins,

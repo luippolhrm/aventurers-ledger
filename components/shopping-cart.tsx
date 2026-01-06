@@ -13,7 +13,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { formatPriceInGold } from "@/lib/utils"
 import { useToast } from "@/hooks/use-toast"
 import { useActiveCharacter } from "@/lib/active-character-context"
-import { createBrowserClient } from "@/lib/supabase/client"
+import { useServices } from "@/hooks/use-services"
 
 interface ShoppingCartProps {
   shopId: string
@@ -26,6 +26,7 @@ export function ShoppingCartComponent({ shopId, characterId, isGm, language }: S
   const t = translations[language]
   const router = useRouter()
   const { toast } = useToast()
+  const services = useServices()
   const { activeCharacterId } = useActiveCharacter() // ✅ Agregar esta línea
   const { cart, loading, error, itemCount, totalPrice, updateItem, removeItem, checkout, canCheckout } = useShoppingCart(shopId)
   type DialogType = 'checkout' | 'success' | null
@@ -66,41 +67,24 @@ export function ShoppingCartComponent({ shopId, characterId, isGm, language }: S
     }
 
     try {
-      const supabase = createBrowserClient()
-      const { data: wallet, error: walletError } = await supabase
-        .from("wallets")
-        .select("platinum, gold, electrum, silver, copper")
-        .eq("character_id", charId)
-        .maybeSingle()
-
-      if (walletError || !wallet) {
-        console.warn("[ShoppingCartComponent] Could not load wallet balance:", walletError)
-        setCurrentWalletBalance(null)
-        return
-      }
-
-      const totalInCopper =
-        (wallet.copper || 0) +
-        (wallet.silver || 0) * 10 +
-        (wallet.electrum || 0) * 50 +
-        (wallet.gold || 0) * 100 +
-        (wallet.platinum || 0) * 1000
+      const wallet = await services.wallet.getWallet(charId)
+      const totalInCopper = await services.wallet.calculateTotalInCopper(charId)
 
       setCurrentWalletBalance({
         totalInCopper,
         wallet: {
-          platinum: wallet.platinum || 0,
-          gold: wallet.gold || 0,
-          electrum: wallet.electrum || 0,
-          silver: wallet.silver || 0,
-          copper: wallet.copper || 0,
+          platinum: wallet.platinum,
+          gold: wallet.gold,
+          electrum: wallet.electrum,
+          silver: wallet.silver,
+          copper: wallet.copper,
         },
       })
     } catch (error) {
       console.error("[ShoppingCartComponent] Error loading wallet balance:", error)
       setCurrentWalletBalance(null)
     }
-  }, [activeCharacterId, characterId])
+  }, [activeCharacterId, characterId, services])
 
   // Cargar balance cuando el componente se monta o cuando cambia el personaje
   useEffect(() => {

@@ -10,8 +10,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { type Language, translations } from "@/lib/translations"
-import { useActiveCharacter } from "@/lib/active-character-context"
-import { createBrowserClient } from "@/lib/supabase/client"
+import { ItemFormConfigService, type ItemCategory } from "@/lib/services/item-form-config"
+import { useServices } from "@/hooks/use-services"
+import type { InventoryItem } from "@/lib/infrastructure/repositories"
+import type { Character } from "@/lib/infrastructure/repositories/character-repository"
+import { LoadingState } from "@/components/molecules/loading"
+import { EmptyState } from "@/components/molecules/empty"
 import { Package, Plus, Shield, TrendingUp, Trash2, Edit, User, Archive, ArrowRight } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { getCharacterAvatar } from "@/lib/character-utils"
@@ -53,39 +57,36 @@ const getSlotTranslationKey = (slot: string): string => {
 }
 
 // Tipos de items que pueden equiparse en slots corporales
-const EQUIPPABLE_ITEM_TYPES = ["weapon", "armor", "equipment"] as const
+const EQUIPPABLE_ITEM_TYPES = ["weapon", "armor", "equipment", "wondrous"] as const
 
 // Verifica si un item puede equiparse en slots corporales
-const canEquipToBodySlots = (item: { item_type: string; is_container: boolean }): boolean => {
-  if (item.is_container) return false
-  return (EQUIPPABLE_ITEM_TYPES as readonly string[]).includes(item.item_type)
-}
-
-interface InventoryItem {
-  id: string
-  character_id: string
-  item_name: string
+const canEquipToBodySlots = (item: {
   item_type: string
-  quantity: number
-  weight: number
-  value_in_copper: number
-  description: string | null
-  equipped: boolean
-  equipped_slot: string | null
-  equippable_slot: string | null
-  container_id: string | null
+  item_category?: string | null
   is_container: boolean
-  container_capacity: number
+}): boolean => {
+  if (item.is_container) return false
+
+  // Si tiene item_category, usar el servicio para verificar
+  if (item.item_category) {
+    return ItemFormConfigService.canEquipCategory(item.item_category as ItemCategory)
+  }
+
+  // Fallback a item_type
+  return (EQUIPPABLE_ITEM_TYPES as readonly string[]).includes(item.item_type)
 }
 
 interface InventoryProps {
   language: Language
+  characterId: string
+  campaignId: string
 }
 
-export function Inventory({ language }: InventoryProps) {
+export function Inventory({ language, characterId, campaignId }: InventoryProps) {
   const t = translations[language]
-  const { activeCharacterId, activeCharacter } = useActiveCharacter()
   const { toast } = useToast()
+  const services = useServices()
+  const [character, setCharacter] = useState<Character | null>(null)
   const [items, setItems] = useState<InventoryItem[]>([])
   const [loading, setLoading] = useState(true)
   const [editingItem, setEditingItem] = useState<InventoryItem | null>(null)
@@ -96,6 +97,7 @@ export function Inventory({ language }: InventoryProps) {
   // Form states
   const [itemName, setItemName] = useState("")
   const [itemType, setItemType] = useState("weapon")
+  const [itemCategory, setItemCategory] = useState<ItemCategory>("weapon")
   const [equippableSlot, setEquippableSlot] = useState("")
   const [quantity, setQuantity] = useState("1")
   const [weight, setWeight] = useState("0")
@@ -104,31 +106,49 @@ export function Inventory({ language }: InventoryProps) {
   const [equipped, setEquipped] = useState(false)
   const [isContainer, setIsContainer] = useState(false)
   const [containerCapacity, setContainerCapacity] = useState("0")
+  // New effect fields
+  const [wondrousType, setWondrousType] = useState("")
+  const [effectDice, setEffectDice] = useState("")
+  const [effectType, setEffectType] = useState("")
+  const [effectTarget, setEffectTarget] = useState("")
+  const [spellLevel, setSpellLevel] = useState("")
+  const [spellName, setSpellName] = useState("")
+  const [spellSchool, setSpellSchool] = useState("")
+  const [effectDescription, setEffectDescription] = useState("")
+  // Combat stats
+  const [damageDice, setDamageDice] = useState("")
+  const [damageType, setDamageType] = useState("")
+  const [armorClass, setArmorClass] = useState("")
 
   // Store in container modal states
   const [showStoreModal, setShowStoreModal] = useState(false)
   const [itemToStore, setItemToStore] = useState<InventoryItem | null>(null)
 
   useEffect(() => {
-    if (activeCharacterId) {
+    if (characterId) {
+      loadCharacter()
       loadInventory()
     }
-  }, [activeCharacterId])
+  }, [characterId])
+
+  const loadCharacter = async () => {
+    if (!characterId) return
+
+    try {
+      const characterData = await services.character.getCharacter(characterId)
+      setCharacter(characterData)
+    } catch (error) {
+      console.error("Error loading character:", error)
+    }
+  }
 
   const loadInventory = async () => {
-    if (!activeCharacterId) return
+    if (!characterId) return
 
     setLoading(true)
     try {
-      const supabase = createBrowserClient()
-      const { data, error } = await supabase
-        .from("inventory")
-        .select("*")
-        .eq("character_id", activeCharacterId)
-        .order("created_at", { ascending: false })
-
-      if (error) throw error
-      setItems(data || [])
+      const inventoryItems = await services.inventory.getInventory(characterId)
+      setItems(inventoryItems)
     } catch (error) {
       console.error("Error loading inventory:", error)
       toast({
@@ -144,6 +164,7 @@ export function Inventory({ language }: InventoryProps) {
   const resetForm = () => {
     setItemName("")
     setItemType("weapon")
+    setItemCategory("weapon")
     setEquippableSlot("")
     setQuantity("1")
     setWeight("0")
@@ -152,6 +173,17 @@ export function Inventory({ language }: InventoryProps) {
     setEquipped(false)
     setIsContainer(false)
     setContainerCapacity("0")
+    setWondrousType("")
+    setEffectDice("")
+    setEffectType("")
+    setEffectTarget("")
+    setSpellLevel("")
+    setSpellName("")
+    setSpellSchool("")
+    setEffectDescription("")
+    setDamageDice("")
+    setDamageType("")
+    setArmorClass("")
     setEditingItem(null)
     setSelectedSlot(null)
     setShowSlotSelector(false)
@@ -161,7 +193,7 @@ export function Inventory({ language }: InventoryProps) {
   }
 
   const handleAddOrUpdateItem = async () => {
-    if (!activeCharacter) return
+    if (!characterId) return
     if (!itemName.trim()) {
       toast({
         title: t.inventory.error,
@@ -173,37 +205,45 @@ export function Inventory({ language }: InventoryProps) {
 
     try {
       const itemData = {
-        character_id: activeCharacter.id,
+        character_id: characterId,
         item_name: itemName.trim(),
         item_type: itemType,
+        item_category: itemCategory || null,
         equippable_slot: equippableSlot || null,
         quantity: Number.parseInt(quantity) || 1,
         weight: Number.parseFloat(weight) || 0,
         value_in_copper: Number.parseInt(valueInCopper) || 0,
-        description: description.trim(),
+        description: description.trim() || null,
         equipped,
+        equipped_slot: null,
+        container_id: null,
         is_container: isContainer,
         container_capacity: isContainer ? Number.parseFloat(containerCapacity) || 0 : 0,
+        // New effect fields
+        wondrous_type: wondrousType || null,
+        effect_dice: effectDice || null,
+        effect_type: effectType || null,
+        effect_target: effectTarget || null,
+        spell_level: spellLevel ? Number.parseInt(spellLevel) : null,
+        spell_name: spellName || null,
+        spell_school: spellSchool || null,
+        effect_description: effectDescription || null,
+        // Combat stats
+        damage_dice: damageDice || null,
+        damage_type: damageType || null,
+        armor_class: armorClass ? Number.parseInt(armorClass) : null,
       }
-
-      const supabase = createBrowserClient()
 
       if (editingItem) {
         // Update existing item
-        const { error } = await supabase.from("inventory").update(itemData).eq("id", editingItem.id)
-
-        if (error) throw error
-
+        await services.inventory.updateItem(editingItem.id, itemData)
         toast({
           title: t.inventory.success,
           description: t.inventory.itemUpdated,
         })
       } else {
         // Add new item
-        const { error } = await supabase.from("inventory").insert([itemData])
-
-        if (error) throw error
-
+        await services.inventory.createItem(itemData)
         toast({
           title: t.inventory.success,
           description: t.inventory.itemAdded,
@@ -216,7 +256,7 @@ export function Inventory({ language }: InventoryProps) {
       console.error("Error adding/updating item:", error)
       toast({
         title: t.inventory.error,
-        description: error?.message || JSON.stringify(error) || t.inventory.failedToSave,
+        description: error?.message || (typeof error === "string" ? error : t.inventory.failedToSave),
         variant: "destructive",
       })
     }
@@ -226,6 +266,7 @@ export function Inventory({ language }: InventoryProps) {
     setEditingItem(item)
     setItemName(item.item_name)
     setItemType(item.item_type)
+    setItemCategory((item.item_category as ItemCategory) || "weapon")
     setEquippableSlot(item.equippable_slot || "")
     setQuantity(item.quantity.toString())
     setWeight(item.weight.toString())
@@ -234,14 +275,24 @@ export function Inventory({ language }: InventoryProps) {
     setEquipped(item.equipped)
     setIsContainer(item.is_container)
     setContainerCapacity(item.container_capacity?.toString() || "0")
+    // New effect fields
+    setWondrousType(item.wondrous_type || "")
+    setEffectDice(item.effect_dice || "")
+    setEffectType(item.effect_type || "")
+    setEffectTarget(item.effect_target || "")
+    setSpellLevel(item.spell_level?.toString() || "")
+    setSpellName(item.spell_name || "")
+    setSpellSchool(item.spell_school || "")
+    setEffectDescription(item.effect_description || "")
+    // Combat stats
+    setDamageDice(item.damage_dice || "")
+    setDamageType(item.damage_type || "")
+    setArmorClass(item.armor_class?.toString() || "")
   }
 
   const handleDeleteItem = async (itemId: string) => {
     try {
-      const supabase = createBrowserClient()
-      const { error } = await supabase.from("inventory").delete().eq("id", itemId)
-
-      if (error) throw error
+      await services.inventory.deleteItem(itemId)
 
       toast({
         title: t.inventory.success,
@@ -249,11 +300,12 @@ export function Inventory({ language }: InventoryProps) {
       })
 
       loadInventory()
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error deleting item:", error)
+      const errorMessage = error?.message || t.inventory.deleteError
       toast({
         title: t.inventory.error,
-        description: t.inventory.deleteError,
+        description: errorMessage,
         variant: "destructive",
       })
     }
@@ -261,14 +313,19 @@ export function Inventory({ language }: InventoryProps) {
 
   const handleToggleEquipped = async (item: InventoryItem) => {
     try {
-      const supabase = createBrowserClient()
-      const { error } = await supabase.from("inventory").update({ equipped: !item.equipped }).eq("id", item.id)
-
-      if (error) throw error
-
+      if (item.equipped) {
+        await services.inventory.unequipItem(item.id)
+      } else if (item.equippable_slot) {
+        await services.inventory.equipItem(item.id, item.equippable_slot)
+      }
       loadInventory()
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error toggling equipped:", error)
+      toast({
+        title: t.inventory.error,
+        description: error?.message || t.inventory.equipError,
+        variant: "destructive",
+      })
     }
   }
 
@@ -319,33 +376,8 @@ export function Inventory({ language }: InventoryProps) {
 
   // Store item in container
   const handleStoreInContainer = async (item: InventoryItem, containerId: string) => {
-    const container = items.find((c) => c.id === containerId)
-    if (!container) return
-
-    const itemTotalWeight = item.weight * item.quantity
-    const availableCapacity = getContainerAvailableCapacity(container)
-
-    if (itemTotalWeight > availableCapacity) {
-      toast({
-        title: t.inventory.error,
-        description: `${t.inventory.capacityExceeded}: ${itemTotalWeight.toFixed(2)} lb > ${availableCapacity.toFixed(2)} lb`,
-        variant: "destructive",
-      })
-      return
-    }
-
     try {
-      const supabase = createBrowserClient()
-      const { error } = await supabase
-        .from("inventory")
-        .update({
-          container_id: containerId,
-          equipped: false,
-          equipped_slot: null,
-        })
-        .eq("id", item.id)
-
-      if (error) throw error
+      await services.inventory.storeInContainer(item.id, containerId)
 
       toast({
         title: t.inventory.success,
@@ -357,9 +389,10 @@ export function Inventory({ language }: InventoryProps) {
       setItemToStore(null)
     } catch (error: any) {
       console.error("Error storing item:", error)
+      const errorMessage = error?.message || t.inventory.failedToSave
       toast({
         title: t.inventory.error,
-        description: error?.message || t.inventory.failedToSave,
+        description: errorMessage,
         variant: "destructive",
       })
     }
@@ -368,10 +401,7 @@ export function Inventory({ language }: InventoryProps) {
   // Remove item from container
   const handleRemoveFromContainer = async (item: InventoryItem) => {
     try {
-      const supabase = createBrowserClient()
-      const { error } = await supabase.from("inventory").update({ container_id: null }).eq("id", item.id)
-
-      if (error) throw error
+      await services.inventory.removeFromContainer(item.id)
 
       toast({
         title: t.inventory.success,
@@ -381,9 +411,10 @@ export function Inventory({ language }: InventoryProps) {
       loadInventory()
     } catch (error: any) {
       console.error("Error removing item from container:", error)
+      const errorMessage = error?.message || t.inventory.failedToSave
       toast({
         title: t.inventory.error,
-        description: error?.message || t.inventory.failedToSave,
+        description: errorMessage,
         variant: "destructive",
       })
     }
@@ -396,30 +427,37 @@ export function Inventory({ language }: InventoryProps) {
       return item.is_container
     }
     // Body slots are for non-container items
-    return !item.is_container
+    if (item.is_container) return false
+
+    // For wondrous items, validate slot based on wondrous_type
+    if (item.item_category === "wondrous" && item.wondrous_type) {
+      const availableSlots = ItemFormConfigService.getAvailableSlots(
+        "wondrous",
+        item.item_type || undefined,
+        item.wondrous_type || undefined,
+      )
+      return availableSlots.includes(slot)
+    }
+
+    // For other equippable items, check if slot is available for category
+    if (item.item_category) {
+      const availableSlots = ItemFormConfigService.getAvailableSlots(
+        item.item_category as ItemCategory,
+        item.item_type || undefined,
+        item.wondrous_type || undefined,
+      )
+      if (availableSlots.length > 0) {
+        return availableSlots.includes(slot)
+      }
+    }
+
+    // Default: allow if item can be equipped
+    return canEquipToBodySlots(item)
   }
 
   const handleEquipToSlot = async (item: InventoryItem, slot: string) => {
     try {
-      const supabase = createBrowserClient()
-
-      // Check if slot is already occupied
-      const existingItem = getItemInSlot(slot)
-      if (existingItem && existingItem.id !== item.id) {
-        // Unequip the existing item first
-        await supabase.from("inventory").update({ equipped: false, equipped_slot: null }).eq("id", existingItem.id)
-      }
-
-      // Equip the new item to the slot
-      const { error } = await supabase
-        .from("inventory")
-        .update({
-          equipped: true,
-          equipped_slot: slot,
-        })
-        .eq("id", item.id)
-
-      if (error) throw error
+      await services.inventory.equipItem(item.id, slot)
 
       toast({
         title: t.inventory.success,
@@ -429,11 +467,12 @@ export function Inventory({ language }: InventoryProps) {
       loadInventory()
       setShowSlotSelector(false)
       setItemToEquip(null)
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error equipping item:", error)
+      const errorMessage = error?.message || t.inventory.equipError
       toast({
         title: t.inventory.error,
-        description: t.inventory.equipError,
+        description: errorMessage,
         variant: "destructive",
       })
     }
@@ -441,16 +480,7 @@ export function Inventory({ language }: InventoryProps) {
 
   const handleUnequipFromSlot = async (item: InventoryItem) => {
     try {
-      const supabase = createBrowserClient()
-      const { error } = await supabase
-        .from("inventory")
-        .update({
-          equipped: false,
-          equipped_slot: null,
-        })
-        .eq("id", item.id)
-
-      if (error) throw error
+      await inventoryService.unequipItem(item.id)
 
       toast({
         title: t.inventory.success,
@@ -458,8 +488,14 @@ export function Inventory({ language }: InventoryProps) {
       })
 
       loadInventory()
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error unequipping item:", error)
+      const errorMessage = error?.message || t.inventory.equipError
+      toast({
+        title: t.inventory.error,
+        description: errorMessage,
+        variant: "destructive",
+      })
     }
   }
 
@@ -590,35 +626,38 @@ export function Inventory({ language }: InventoryProps) {
     )
   }
 
-  if (!activeCharacterId) {
+  if (!characterId) {
     return (
-      <Card className="w-full max-w-6xl">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Package className="w-6 h-6" />
-            {t.inventory.title}
-          </CardTitle>
-          <CardDescription>{t.inventory.noCharacterSelected}</CardDescription>
-        </CardHeader>
-      </Card>
+      <div className="w-full max-w-7xl mx-auto space-y-4 md:space-y-6">
+        <Card className="w-full">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-lg md:text-xl flex items-center gap-2">
+              <Package className="w-4 h-4 md:w-5 md:h-5" />
+              {t.inventory.title}
+            </CardTitle>
+            <CardDescription className="text-xs md:text-sm">{t.inventory.noCharacterSelected}</CardDescription>
+          </CardHeader>
+        </Card>
+      </div>
     )
   }
 
   return (
-    <Card className="w-full max-w-6xl">
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Package className="w-6 h-6" />
-          {t.inventory.title}
-        </CardTitle>
-        <CardDescription>
-          {activeCharacter?.name} - {t.inventory.description}
-        </CardDescription>
-      </CardHeader>
+    <div className="w-full max-w-7xl mx-auto space-y-4 md:space-y-6">
+      <Card className="w-full">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-lg md:text-xl flex items-center gap-2">
+            <Package className="w-4 h-4 md:w-5 md:h-5" />
+            {t.inventory.title}
+          </CardTitle>
+          <CardDescription className="text-xs md:text-sm">
+            {t.inventory.description}
+          </CardDescription>
+        </CardHeader>
 
-      <CardContent>
-        <Tabs defaultValue="items" className="w-full">
-          <TabsList className="grid w-full grid-cols-4">
+        <CardContent>
+          <Tabs defaultValue="items" className="w-full">
+            <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4 gap-1">
             <TabsTrigger value="items">{t.inventory.tabs.items}</TabsTrigger>
             <TabsTrigger value="add">{t.inventory.tabs.add}</TabsTrigger>
             <TabsTrigger value="equipped">{t.inventory.tabs.equipped}</TabsTrigger>
@@ -628,9 +667,13 @@ export function Inventory({ language }: InventoryProps) {
           {/* Items List Tab */}
           <TabsContent value="items" className="space-y-4">
             {loading ? (
-              <p className="text-center py-8 text-muted-foreground">{t.inventory.loading}</p>
+              <LoadingState message={t.inventory.loading} />
             ) : items.length === 0 ? (
-              <p className="text-center py-8 text-muted-foreground">{t.inventory.noItems}</p>
+              <EmptyState
+                icon={Package}
+                title={t.inventory.noItems}
+                description="Add your first item to get started"
+              />
             ) : (
               <div className="rounded-md border">
                 <Table>
@@ -794,7 +837,24 @@ export function Inventory({ language }: InventoryProps) {
                   </Select>
                 </div>
 
-                {(itemType === "weapon" || itemType === "armor" || itemType === "equipment") && (
+                <div className="space-y-2">
+                  <Label htmlFor="itemCategory">{t.marketplace?.itemCategory || "Category"}</Label>
+                  <Select value={itemCategory} onValueChange={(value) => setItemCategory(value as ItemCategory)}>
+                    <SelectTrigger id="itemCategory">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {ItemFormConfigService.getAllCategories().map((cat) => (
+                        <SelectItem key={cat} value={cat}>
+                          {cat.charAt(0).toUpperCase() + cat.slice(1)}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Dynamic equippable slot selector */}
+                {ItemFormConfigService.canEquipCategory(itemCategory) && (
                   <div className="space-y-2">
                     <Label htmlFor="equippableSlot">{t.inventory.equippableSlot}</Label>
                     <Select value={equippableSlot} onValueChange={setEquippableSlot}>
@@ -802,21 +862,15 @@ export function Inventory({ language }: InventoryProps) {
                         <SelectValue placeholder={t.inventory.selectSlot} />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="head">{t.inventory.slots.head.name}</SelectItem>
-                        <SelectItem value="neck">{t.inventory.slots.neck.name}</SelectItem>
-                        <SelectItem value="shoulders">{t.inventory.slots.shoulders.name}</SelectItem>
-                        <SelectItem value="body">{t.inventory.slots.body.name}</SelectItem>
-                        <SelectItem value="hands">{t.inventory.slots.hands.name}</SelectItem>
-                        <SelectItem value="waist">{t.inventory.slots.waist.name}</SelectItem>
-                        <SelectItem value="ring_left">{t.inventory.slots.ringLeft.name}</SelectItem>
-                        <SelectItem value="ring_right">{t.inventory.slots.ringRight.name}</SelectItem>
-                        <SelectItem value="feet">{t.inventory.slots.feet.name}</SelectItem>
-                        {itemType === "weapon" && (
-                          <>
-                            <SelectItem value="weapon_main">{t.inventory.slots.weaponMain.name}</SelectItem>
-                            <SelectItem value="weapon_off">{t.inventory.slots.weaponOff.name}</SelectItem>
-                          </>
-                        )}
+                        {ItemFormConfigService.getAvailableSlots(itemCategory, itemType, wondrousType).map((slot) => {
+                          const slotKey = slot.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase())
+                          const slotTranslation = t.inventory.slots?.[slotKey as keyof typeof t.inventory.slots]
+                          return (
+                            <SelectItem key={slot} value={slot}>
+                              {slotTranslation?.name || slot}
+                            </SelectItem>
+                          )
+                        })}
                       </SelectContent>
                     </Select>
                   </div>
@@ -929,6 +983,163 @@ export function Inventory({ language }: InventoryProps) {
                 />
               </div>
 
+              {/* Dynamic Fields based on Category */}
+              {(() => {
+                const categoryFields = ItemFormConfigService.getFieldsForCategory(itemCategory)
+                const conditionalFields = ItemFormConfigService.getConditionalFields(itemCategory, {
+                  wondrous_type: wondrousType,
+                })
+
+                if (categoryFields.length === 0 && conditionalFields.length === 0) return null
+
+                return (
+                  <div className="space-y-4 border-t pt-4">
+                    <h3 className="text-lg font-semibold">
+                      {itemCategory === "weapon" || itemCategory === "armor"
+                        ? "Combat Stats"
+                        : itemCategory === "potion"
+                          ? "Potion Effects"
+                          : itemCategory === "scroll"
+                            ? "Spell Information"
+                            : itemCategory === "wondrous"
+                              ? "Wondrous Item Details"
+                              : "Item Effects"}
+                    </h3>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {categoryFields.map((field) => {
+                        if (field.type === "text" || field.type === "number") {
+                          const fieldValue =
+                            field.id === "damage_dice"
+                              ? damageDice
+                              : field.id === "armor_class"
+                                ? armorClass
+                                : field.id === "effect_dice"
+                                  ? effectDice
+                                  : field.id === "spell_level"
+                                    ? spellLevel
+                                    : field.id === "spell_name"
+                                      ? spellName
+                                      : ""
+
+                          const setFieldValue = (value: string) => {
+                            if (field.id === "damage_dice") setDamageDice(value)
+                            else if (field.id === "armor_class") setArmorClass(value)
+                            else if (field.id === "effect_dice") setEffectDice(value)
+                            else if (field.id === "spell_level") setSpellLevel(value)
+                            else if (field.id === "spell_name") setSpellName(value)
+                          }
+
+                          return (
+                            <div key={field.id}>
+                              <Label htmlFor={field.id}>{field.label}</Label>
+                              <Input
+                                id={field.id}
+                                type={field.type}
+                                value={fieldValue}
+                                onChange={(e) => setFieldValue(e.target.value)}
+                                placeholder={field.placeholder}
+                                min={field.min}
+                                max={field.max}
+                                step={field.step}
+                              />
+                              {field.helpText && <p className="text-xs text-muted-foreground mt-1">{field.helpText}</p>}
+                            </div>
+                          )
+                        }
+
+                        if (field.type === "select") {
+                          const options = field.options || []
+                          const fieldValue =
+                            field.id === "damage_type"
+                              ? damageType
+                              : field.id === "effect_type"
+                                ? effectType
+                                : field.id === "effect_target"
+                                  ? effectTarget
+                                  : field.id === "spell_school"
+                                    ? spellSchool
+                                    : field.id === "wondrous_type"
+                                      ? wondrousType
+                                      : ""
+
+                          const setFieldValue = (value: string) => {
+                            if (field.id === "damage_type") setDamageType(value)
+                            else if (field.id === "effect_type") setEffectType(value)
+                            else if (field.id === "effect_target") setEffectTarget(value)
+                            else if (field.id === "spell_school") setSpellSchool(value)
+                            else if (field.id === "wondrous_type") setWondrousType(value)
+                          }
+
+                          return (
+                            <div key={field.id}>
+                              <Label htmlFor={field.id}>{field.label}</Label>
+                              <Select value={fieldValue} onValueChange={setFieldValue}>
+                                <SelectTrigger>
+                                  <SelectValue placeholder={`Select ${field.label.toLowerCase()}`} />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {options.map((option) => (
+                                    <SelectItem key={option.value} value={option.value}>
+                                      {option.label}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                              {field.helpText && <p className="text-xs text-muted-foreground mt-1">{field.helpText}</p>}
+                            </div>
+                          )
+                        }
+
+                        if (field.type === "textarea") {
+                          return (
+                            <div key={field.id} className="col-span-2">
+                              <Label htmlFor={field.id}>{field.label}</Label>
+                              <Textarea
+                                id={field.id}
+                                value={effectDescription}
+                                onChange={(e) => setEffectDescription(e.target.value)}
+                                placeholder={field.placeholder}
+                                rows={3}
+                              />
+                              {field.helpText && <p className="text-xs text-muted-foreground mt-1">{field.helpText}</p>}
+                            </div>
+                          )
+                        }
+
+                        return null
+                      })}
+
+                      {/* Conditional Fields */}
+                      {conditionalFields.map((field) => {
+                        if (field.type === "select") {
+                          const options = field.options || []
+                          return (
+                            <div key={field.id}>
+                              <Label htmlFor={field.id}>{field.label}</Label>
+                              <Select value={equippableSlot} onValueChange={setEquippableSlot}>
+                                <SelectTrigger>
+                                  <SelectValue placeholder={`Select ${field.label.toLowerCase()}`} />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {options.map((option) => (
+                                    <SelectItem key={option.value} value={option.value}>
+                                      {option.label}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                              {field.helpText && <p className="text-xs text-muted-foreground mt-1">{field.helpText}</p>}
+                            </div>
+                          )
+                        }
+                        return null
+                      })}
+                    </div>
+                  </div>
+                )
+              })()}
+
               <Button onClick={handleAddOrUpdateItem} className="w-full">
                 <Plus className="w-4 h-4 mr-2" />
                 {editingItem ? t.inventory.updateItem : t.inventory.addItem}
@@ -965,11 +1176,11 @@ export function Inventory({ language }: InventoryProps) {
 
               {/* Center Column - Character visual representation */}
               <div className="flex flex-col items-center justify-center space-y-4">
-                {activeCharacter ? (
+                {character ? (
                   <div className="relative w-48 h-48 rounded-full overflow-hidden bg-muted border-2 border-primary/20 flex-shrink-0">
                     <Image
-                      src={getCharacterAvatar(activeCharacter)}
-                      alt={activeCharacter.name}
+                      src={getCharacterAvatar(character)}
+                      alt={character.name}
                       fill
                       className="object-cover"
                       unoptimized
@@ -981,8 +1192,8 @@ export function Inventory({ language }: InventoryProps) {
                   </div>
                 )}
                 <div className="text-center">
-                  <p className="font-semibold">{activeCharacter?.name || "No character selected"}</p>
-                  <p className="text-sm text-muted-foreground">{activeCharacter?.race || ""}</p>
+                  <p className="font-semibold">{character?.name || "No character selected"}</p>
+                  <p className="text-sm text-muted-foreground">{character?.race || ""}</p>
                 </div>
               </div>
 
@@ -1146,7 +1357,10 @@ export function Inventory({ language }: InventoryProps) {
                     if ((CONTAINER_SLOTS as readonly string[]).includes(selectedSlot)) {
                       return item.is_container
                     }
-                    return !item.is_container
+                    if (item.is_container) return false
+
+                    // Validate that item can be equipped to this slot
+                    return canEquipToBodySlot(item, selectedSlot)
                   })
                   .map((item) => (
                     <Button
@@ -1222,24 +1436,44 @@ export function Inventory({ language }: InventoryProps) {
                     })}
                   </>
                 ) : (
-                  // Regular item: show body slots
+                  // Regular item: show body slots (filtered by item type/category)
                   <>
-                    {BODY_SLOTS.map((slot) => {
-                      const existingItem = getItemInSlot(slot)
-                      return (
-                        <Button
-                          key={slot}
-                          variant="outline"
-                          className="w-full justify-between bg-transparent"
-                          onClick={() => handleEquipToSlot(itemToEquip, slot)}
-                        >
-                          <span>{t.inventory.slots[getSlotTranslationKey(slot) as keyof typeof t.inventory.slots]?.name || slot}</span>
-                          {existingItem && (
-                            <span className="text-xs text-muted-foreground">({existingItem.item_name})</span>
-                          )}
-                        </Button>
-                      )
-                    })}
+                    {(() => {
+                      // Get available slots for this item
+                      const availableSlots =
+                        itemToEquip.item_category && itemToEquip.item_category !== "equipment"
+                          ? ItemFormConfigService.getAvailableSlots(
+                              itemToEquip.item_category as ItemCategory,
+                              itemToEquip.item_type || undefined,
+                              itemToEquip.wondrous_type || undefined,
+                            )
+                          : BODY_SLOTS
+
+                      // If no specific slots, show all body slots
+                      const slotsToShow = availableSlots.length > 0 ? availableSlots : BODY_SLOTS
+
+                      return slotsToShow
+                        .filter((slot) => !(CONTAINER_SLOTS as readonly string[]).includes(slot))
+                        .map((slot) => {
+                          const existingItem = getItemInSlot(slot)
+                          return (
+                            <Button
+                              key={slot}
+                              variant="outline"
+                              className="w-full justify-between bg-transparent"
+                              onClick={() => handleEquipToSlot(itemToEquip, slot)}
+                            >
+                              <span>
+                                {t.inventory.slots[getSlotTranslationKey(slot) as keyof typeof t.inventory.slots]?.name ||
+                                  slot}
+                              </span>
+                              {existingItem && (
+                                <span className="text-xs text-muted-foreground">({existingItem.item_name})</span>
+                              )}
+                            </Button>
+                          )
+                        })
+                    })()}
                   </>
                 )}
               </CardContent>
@@ -1315,6 +1549,7 @@ export function Inventory({ language }: InventoryProps) {
           </div>
         )}
       </CardContent>
-    </Card>
+      </Card>
+    </div>
   )
 }

@@ -8,9 +8,10 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Store, Plus, Trash2 } from "lucide-react"
-import { createBrowserClient } from "@/lib/supabase/client"
 import { useAuth } from "@/lib/auth-context"
 import { type Language, translations } from "@/lib/translations"
+import { useServices } from "@/hooks/use-services"
+import { ErrorService } from "@/lib/infrastructure/errors"
 
 interface Shop {
   id: string
@@ -29,7 +30,7 @@ interface ShopsProps {
 
 export function Shops({ language, locationId, onSelectShop }: ShopsProps) {
   const t = translations[language]
-  const supabase = createBrowserClient()
+  const services = useServices()
   const { user } = useAuth()
 
   const [shops, setShops] = useState<Shop[]>([])
@@ -47,104 +48,82 @@ export function Shops({ language, locationId, onSelectShop }: ShopsProps) {
     }
   }, [locationId, user])
 
-  // Función helper para validar acceso a una campaña
-  const validateCampaignAccess = async (campaignId: string): Promise<boolean> => {
-    if (!user || !campaignId) {
-      return false
-    }
-
-    try {
-      const { data, error } = await supabase
-        .from("campaign_members")
-        .select("role")
-        .eq("campaign_id", campaignId)
-        .eq("user_id", user.id)
-        .maybeSingle()
-
-      if (error) {
-        console.error("[v0] Shops: Error validating campaign access:", error)
-        return false
-      }
-
-      return !!data
-    } catch (err) {
-      console.error("[v0] Shops: Exception validating campaign access:", err)
-      return false
-    }
-  }
-
   const loadShops = async () => {
     if (!locationId || !user) {
       setShops([])
       return
     }
 
-    // Validar que la location pertenezca a una campaña del usuario
-    // Primero obtener la location para verificar su campaign_id
-    const { data: locationData, error: locationError } = await supabase
-      .from("locations")
-      .select("campaign_id")
-      .eq("id", locationId)
-      .maybeSingle()
-
-    if (locationError || !locationData) {
-      console.error("[v0] Shops: Error validating location:", locationError)
-      setShops([])
-      return
-    }
-
-    // Validar acceso a la campaña de la location
-    const hasAccess = await validateCampaignAccess(locationData.campaign_id)
-    if (!hasAccess) {
-      console.error("[v0] Shops: Cannot load shops - no access to campaign:", locationData.campaign_id)
-      setShops([])
-      return
-    }
-
-    const { data, error } = await supabase
-      .from("shops")
-      .select("*")
-      .eq("location_id", locationId)
-      .order("created_at", { ascending: false })
-
-    if (error) {
+    try {
+      // Obtener tiendas usando ShopService
+      const shopsData = await services.shop.getShopsByLocation(locationId)
+      setShops(shopsData.map((shop) => ({
+        id: shop.id,
+        name: shop.name,
+        description: shop.description,
+        shopkeeper_name: shop.shopkeeper_name,
+        location_id: shop.location_id,
+        created_at: shop.created_at,
+      })))
+    } catch (error) {
       console.error("[v0] Shops: Error loading shops:", error)
       setShops([])
-      return
     }
-
-    setShops(data || [])
   }
 
   const handleCreateShop = async () => {
-    if (!newShopName.trim()) return
+    if (!newShopName.trim() || !user) return
 
     setIsLoading(true)
-    const { data, error } = await supabase
-      .from("shops")
-      .insert({
-        name: newShopName,
-        description: newShopDescription,
-        shopkeeper_name: newShopkeeperName,
-        location_id: locationId,
-      })
-      .select()
+    try {
+      const newShop = await services.shop.createShop(
+        {
+          name: newShopName,
+          description: newShopDescription || null,
+          shopkeeper_name: newShopkeeperName || null,
+          location_id: locationId,
+        },
+        user.id
+      )
 
-    if (!error && data) {
-      setShops([data[0], ...shops])
+      setShops([
+        {
+          id: newShop.id,
+          name: newShop.name,
+          description: newShop.description,
+          shopkeeper_name: newShop.shopkeeper_name,
+          location_id: newShop.location_id,
+          created_at: newShop.created_at,
+        },
+        ...shops,
+      ])
       setNewShopName("")
       setNewShopDescription("")
       setNewShopkeeperName("")
       setIsCreateDialogOpen(false)
+    } catch (error) {
+      console.error("[v0] Shops: Error creating shop:", error)
+      const errorMessage =
+        error instanceof Error
+          ? error.message
+          : ErrorService.fromUnknownError(error).message
+      alert(errorMessage || "Error creating shop")
+    } finally {
+      setIsLoading(false)
     }
-    setIsLoading(false)
   }
 
   const handleDeleteShop = async (shopId: string) => {
-    const { error } = await supabase.from("shops").delete().eq("id", shopId)
-
-    if (!error) {
+    try {
+      await services.shop.deleteShop(shopId)
       setShops(shops.filter((s) => s.id !== shopId))
+    } catch (error) {
+      console.error("[v0] Shops: Error deleting shop:", error)
+      const errorMessage =
+        error instanceof Error
+          ? error.message
+          : ErrorService.fromUnknownError(error).message
+      alert(errorMessage || "Error deleting shop")
     }
   }
 

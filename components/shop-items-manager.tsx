@@ -3,8 +3,9 @@
 import { useEffect, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { Package, Pencil, Trash2, Plus } from "lucide-react"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { Package, Pencil, Trash2, Plus, Edit } from "lucide-react"
 import { createBrowserClient } from "@/lib/supabase/client"
 import { useAuth } from "@/lib/auth-context"
 import { useToast } from "@/hooks/use-toast"
@@ -34,7 +35,6 @@ export function ShopItemsManager({ shopId, shopName, language, isGm }: ShopItems
 
   const [items, setItems] = useState<ShopItemRow[]>([])
   const [isLoading, setIsLoading] = useState(true)
-  const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [editingItem, setEditingItem] = useState<ShopItemRow | null>(null)
   const [isSaving, setIsSaving] = useState(false)
 
@@ -68,12 +68,14 @@ export function ShopItemsManager({ shopId, shopName, language, isGm }: ShopItems
 
   const handleCreateItem = () => {
     setEditingItem(null)
-    setIsDialogOpen(true)
   }
 
   const handleEditItem = (item: ShopItemRow) => {
     setEditingItem(item)
-    setIsDialogOpen(true)
+  }
+
+  const handleCancelEdit = () => {
+    setEditingItem(null)
   }
 
   const handleDeleteItem = async (itemId: string) => {
@@ -133,7 +135,6 @@ export function ShopItemsManager({ shopId, shopName, language, isGm }: ShopItems
         })
       }
 
-      setIsDialogOpen(false)
       setEditingItem(null)
       loadItems()
     } catch (error) {
@@ -149,121 +150,141 @@ export function ShopItemsManager({ shopId, shopName, language, isGm }: ShopItems
   }
 
 
-  return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-3xl font-bold flex items-center gap-2">
-            <Package className="w-8 h-8" />
-            {shopName}
-          </h2>
-          <p className="text-muted-foreground mt-1">
-            {t.marketplace?.manageItemsDescription || "Manage items available in this shop"}
-          </p>
-        </div>
-        {isGm && (
-          <Button onClick={handleCreateItem}>
-            <Plus className="w-4 h-4 mr-2" />
-            {t.marketplace?.addItem || "Add Item"}
-          </Button>
-        )}
-      </div>
+  const copperToGold = (copper: number) => (copper / 100).toFixed(2)
 
-      {/* Items List */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        {items.map((item) => (
-          <Card key={item.id} className="hover:shadow-lg transition-shadow">
-            <CardHeader>
-              <div className="flex items-start justify-between">
-                <div className="flex-1">
-                  <CardTitle className="text-lg flex items-center gap-2">
-                    {item.item_name}
-                    {item.rarity && (
-                      <span className={`text-xs px-2 py-1 rounded-full ${getRarityColor(item.rarity)}`}>
-                        {t.marketplace?.rarities?.[item.rarity] || item.rarity}
-                      </span>
-                    )}
-                  </CardTitle>
-                  <CardDescription>
-                    {item.item_type}
-                    {item.item_category && ` • ${item.item_category}`}
-                  </CardDescription>
-                </div>
-                {isGm && (
-                  <div className="flex gap-1">
-                    <Button size="icon" variant="ghost" onClick={() => handleEditItem(item)}>
-                      <Pencil className="w-4 h-4" />
-                    </Button>
-                    <Button size="icon" variant="ghost" onClick={() => handleDeleteItem(item.id)}>
-                      <Trash2 className="w-4 h-4" />
+  return (
+    <Card className="w-full max-w-6xl">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Package className="w-6 h-6" />
+          {shopName}
+        </CardTitle>
+        <CardDescription>
+          {t.marketplace?.manageItemsDescription || "Manage items available in this shop"}
+        </CardDescription>
+      </CardHeader>
+
+      <CardContent>
+        <Tabs defaultValue="items" className="w-full">
+          <TabsList className="grid w-full grid-cols-2">
+            <TabsTrigger value="items">{t.inventory?.tabs?.items || "Lista de artículos"}</TabsTrigger>
+            <TabsTrigger value="add">{isGm ? (editingItem ? t.marketplace?.editItem : t.marketplace?.addItem) : t.inventory?.tabs?.items || "Lista de artículos"}</TabsTrigger>
+          </TabsList>
+
+          {/* Items List Tab */}
+          <TabsContent value="items" className="space-y-4">
+            {isLoading ? (
+              <p className="text-center py-8 text-muted-foreground">{t.inventory?.loading || "Loading..."}</p>
+            ) : items.length === 0 ? (
+              <Card>
+                <CardContent className="py-12 text-center">
+                  <Package className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
+                  <p className="text-lg font-semibold">{t.marketplace?.noItemsYet || "No items yet"}</p>
+                  <p className="text-muted-foreground mt-1">
+                    {isGm
+                      ? "Agrega tu primer artículo usando el formulario en la pestaña Agregar"
+                      : "El dueño de la tienda aún no ha agregado artículos"}
+                  </p>
+                </CardContent>
+              </Card>
+            ) : (
+              <div className="rounded-md border">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>{t.marketplace?.itemName || "Item Name"}</TableHead>
+                      <TableHead>{t.inventory?.type || "Type"}</TableHead>
+                      <TableHead>{t.marketplace?.itemCategory || "Category"}</TableHead>
+                      <TableHead>{t.marketplace?.rarity || "Rarity"}</TableHead>
+                      <TableHead className="text-right">{t.marketplace?.pricePerUnit || "Price"}</TableHead>
+                      <TableHead className="text-right">{t.marketplace?.quantity || "Stock"}</TableHead>
+                      {isGm && <TableHead className="text-right">{t.inventory?.actions || "Actions"}</TableHead>}
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {items.map((item) => (
+                      <TableRow key={item.id}>
+                        <TableCell className="font-medium">
+                          <div className="flex flex-col">
+                            <span>{item.item_name}</span>
+                            {item.description && (
+                              <span className="text-xs text-muted-foreground line-clamp-1 mt-1">
+                                {item.description}
+                              </span>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell>{item.item_type || "—"}</TableCell>
+                        <TableCell>
+                          {item.item_category ? (
+                            <span className="text-xs px-2 py-1 rounded-full bg-primary/10 text-primary">
+                              {(t.marketplace as any)?.categories?.[item.item_category as string] ||
+                                item.item_category}
+                            </span>
+                          ) : (
+                            "—"
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {item.rarity && (
+                            <span className={`text-xs px-2 py-1 rounded-full ${getRarityColor(item.rarity)}`}>
+                              {t.marketplace?.rarities?.[item.rarity] || item.rarity}
+                            </span>
+                          )}
+                          {!item.rarity && "—"}
+                        </TableCell>
+                        <TableCell className="text-right font-semibold text-primary">
+                          {copperToGold(item.price_in_copper || 0)} gp
+                        </TableCell>
+                        <TableCell className="text-right">{item.quantity_available || 0}</TableCell>
+                        {isGm && (
+                          <TableCell className="text-right">
+                            <div className="flex justify-end gap-1">
+                              <Button variant="ghost" size="sm" onClick={() => handleEditItem(item)}>
+                                <Edit className="w-4 h-4" />
+                              </Button>
+                              <Button variant="ghost" size="sm" onClick={() => handleDeleteItem(item.id)}>
+                                <Trash2 className="w-4 h-4" />
+                              </Button>
+                            </div>
+                          </TableCell>
+                        )}
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+          </TabsContent>
+
+          {/* Add/Edit Item Tab */}
+          {isGm && (
+            <TabsContent value="add" className="space-y-4">
+              <div className="space-y-4">
+                {editingItem && (
+                  <div className="p-4 bg-muted rounded-lg flex justify-between items-center">
+                    <p className="text-sm">
+                      {t.inventory?.editingItem || "Editing item"}: {editingItem.item_name}
+                    </p>
+                    <Button variant="outline" size="sm" onClick={handleCancelEdit}>
+                      {t.inventory?.cancelEdit || "Cancel Edit"}
                     </Button>
                   </div>
                 )}
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-2 text-sm">
-                {item.description && (
-                  <p className="text-muted-foreground line-clamp-2">{item.description}</p>
-                )}
-                <div className="flex justify-between items-center pt-2 border-t">
-                  <span className="font-semibold text-primary">
-                    {((item.price_in_copper || 0) / 100).toFixed(2)} gp
-                  </span>
-                  <span className="text-muted-foreground">Stock: {item.quantity_available}</span>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
 
-      {/* Empty State */}
-      {items.length === 0 && !isLoading && (
-        <Card>
-          <CardContent className="py-12 text-center">
-            <Package className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
-            <p className="text-lg font-semibold">{t.marketplace?.noItemsYet || "No items yet"}</p>
-            <p className="text-muted-foreground mt-1">
-              {isGm
-                ? "Add your first item using the manual entry form"
-                : "The shop owner hasn't added any items yet"}
-            </p>
-            {isGm && (
-              <Button onClick={handleCreateItem} className="mt-4">
-                <Plus className="w-4 h-4 mr-2" />
-                {t.marketplace?.addItem || "Add Item"}
-              </Button>
-            )}
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Create/Edit Dialog */}
-      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="max-w-7xl max-h-[90vh] overflow-y-auto w-[95vw]">
-          <DialogHeader>
-            <DialogTitle>
-              {editingItem ? t.marketplace?.editItem || "Edit Item" : t.marketplace?.addItem || "Add Item"}
-            </DialogTitle>
-            <DialogDescription>
-              {editingItem
-                ? "Update the item details below"
-                : "Add a new item using the manual entry form"}
-            </DialogDescription>
-          </DialogHeader>
-
-            <ShopItemForm
-              language={language}
-            initialData={editingItem || undefined}
+                <ShopItemForm
+                  language={language}
+                  initialData={editingItem || undefined}
                   onSubmit={handleSaveItem}
-                  onCancel={() => setIsDialogOpen(false)}
+                  onCancel={handleCancelEdit}
                   isLoading={isSaving}
                 />
-        </DialogContent>
-      </Dialog>
-    </div>
+              </div>
+            </TabsContent>
+          )}
+        </Tabs>
+      </CardContent>
+    </Card>
   )
 }
 

@@ -2,15 +2,16 @@
 
 import type React from "react"
 
-import { createClient } from "@/lib/supabase/client"
+import { AuthService } from "@/lib/application/services"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { AuthLayout } from "@/components/auth-layout"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { useState } from "react"
+import { useState, useMemo } from "react"
 import { useLanguage } from "@/lib/language-context"
+import { ErrorService } from "@/lib/infrastructure/errors"
 
 export default function SignUpPage() {
   const [email, setEmail] = useState("")
@@ -21,10 +22,10 @@ export default function SignUpPage() {
   const [isLoading, setIsLoading] = useState(false)
   const router = useRouter()
   const { t } = useLanguage()
+  const authService = useMemo(() => new AuthService(), [])
 
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault()
-    const supabase = createClient()
     setIsLoading(true)
     setError(null)
 
@@ -35,51 +36,39 @@ export default function SignUpPage() {
     }
 
     try {
-      const { error, data } = await supabase.auth.signUp({
+      // El perfil se crea automáticamente mediante trigger de la base de datos
+      // No es necesario crearlo manualmente
+      await authService.signUp({
         email,
         password,
-        options: {
-          emailRedirectTo: process.env.NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL || `${window.location.origin}/dashboard`,
-          data: {
-            display_name: displayName,
-          },
-        },
+        displayName,
       })
-      if (error) throw error
-
-      if (data.user) {
-        await supabase
-          .from("profiles")
-          .insert({
-            id: data.user.id,
-            display_name: displayName,
-          })
-          .select()
-      }
 
       router.push("/auth/sign-up-success")
     } catch (error: unknown) {
-      setError(error instanceof Error ? error.message : t.auth.signUpError)
+      const errorMessage =
+        error instanceof Error
+          ? error.message
+          : ErrorService.fromUnknownError(error).message
+      setError(errorMessage || t.auth.signUpError)
     } finally {
       setIsLoading(false)
     }
   }
 
   const handleGoogleSignUp = async () => {
-    const supabase = createClient()
     setIsLoading(true)
     setError(null)
 
     try {
-      const { error } = await supabase.auth.signInWithOAuth({
-        provider: "google",
-        options: {
-          redirectTo: `${window.location.origin}/auth/callback`,
-        },
-      })
-      if (error) throw error
+      await authService.signInWithOAuth("google")
+      // El redirect se maneja automáticamente por OAuth
     } catch (error: unknown) {
-      setError(error instanceof Error ? error.message : t.auth.signUpError)
+      const errorMessage =
+        error instanceof Error
+          ? error.message
+          : ErrorService.fromUnknownError(error).message
+      setError(errorMessage || t.auth.signUpError)
       setIsLoading(false)
     }
   }

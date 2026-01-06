@@ -8,10 +8,11 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { useState } from "react"
-import { createBrowserClient } from "@/lib/supabase/client"
+import { useState, useMemo } from "react"
+import { AuthService } from "@/lib/application/services"
 import { toast } from "sonner"
 import { Loader2 } from "lucide-react"
+import { ErrorService } from "@/lib/infrastructure/errors"
 
 interface ProfilePageContentProps {
   user: User
@@ -22,6 +23,7 @@ export default function ProfilePageContent({ user }: ProfilePageContentProps) {
   const [passwordLoading, setPasswordLoading] = useState(false)
   const [newPassword, setNewPassword] = useState("")
   const [confirmPassword, setConfirmPassword] = useState("")
+  const authService = useMemo(() => new AuthService(), [])
 
   const getUserInitials = () => {
     if (user.user_metadata?.full_name) {
@@ -58,27 +60,22 @@ export default function ProfilePageContent({ user }: ProfilePageContentProps) {
       return
     }
 
-    if (newPassword.length < 6) {
-      toast.error("Password must be at least 6 characters")
-      return
-    }
-
     setPasswordLoading(true)
-    const supabase = createBrowserClient()
 
-    const { error } = await supabase.auth.updateUser({
-      password: newPassword,
-    })
-
-    if (error) {
-      toast.error(error.message)
-    } else {
+    try {
+      await authService.updatePassword(newPassword)
       toast.success("Password updated successfully")
       setNewPassword("")
       setConfirmPassword("")
+    } catch (error: unknown) {
+      const errorMessage =
+        error instanceof Error
+          ? error.message
+          : ErrorService.fromUnknownError(error).message
+      toast.error(errorMessage || "Failed to update password")
+    } finally {
+      setPasswordLoading(false)
     }
-
-    setPasswordLoading(false)
   }
 
   return (

@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation"
 import { createBrowserClient } from "@/lib/supabase/client"
 import { useAuth } from "@/lib/auth-context"
 import { useLanguage } from "@/lib/language-context"
-import { useActiveCharacter } from "@/lib/active-character-context"
+import { useServices } from "@/hooks/use-services"
 import { ShopItemsManager } from "@/components/shop-items-manager"
 import { ShopCatalog } from "@/components/shop-catalog"
 import { ShoppingCartComponent } from "@/components/shopping-cart"
@@ -32,7 +32,7 @@ export default function ShopItemsPage({ params }: { params: Promise<{ shopId: st
   const router = useRouter()
   const { user } = useAuth()
   const { language } = useLanguage()
-  const { activeCharacterId } = useActiveCharacter()
+  const services = useServices()
   const supabase = createBrowserClient()
   
   // Unwrap params Promise using React.use()
@@ -42,6 +42,7 @@ export default function ShopItemsPage({ params }: { params: Promise<{ shopId: st
   const [isLoading, setIsLoading] = useState(true)
   const [isGm, setIsGm] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [characterId, setCharacterId] = useState<string | null>(null)
 
   useEffect(() => {
     loadShopData()
@@ -117,7 +118,7 @@ export default function ShopItemsPage({ params }: { params: Promise<{ shopId: st
       setIsGm(finalIsGm)
 
       // Validar acceso: si es GM, siempre tiene acceso
-      // Si no es GM, verificar que sea miembro de la campaña
+      // Si no es GM, verificar que sea miembro de la campaña y obtener su personaje
       if (!userIsGm) {
         const { data: memberData, error: memberError } = await supabase
           .from("campaign_members")
@@ -129,6 +130,22 @@ export default function ShopItemsPage({ params }: { params: Promise<{ shopId: st
         if (memberError || !memberData) {
           throw new Error("You don't have permission to access this shop")
         }
+
+        // Obtener el personaje del jugador en esta campaña
+        try {
+          const playerCharacter = await services.campaign.getPlayerCharacterInCampaign(campaign.id, user.id)
+          if (playerCharacter) {
+            setCharacterId(playerCharacter.id)
+          } else {
+            setCharacterId(null)
+          }
+        } catch (err) {
+          console.error("Error loading player character:", err)
+          setCharacterId(null)
+        }
+      } else {
+        // Si es GM, no necesita characterId para la vista de administración
+        setCharacterId(null)
       }
     } catch (err) {
       console.error("Error loading shop data:", err)
@@ -206,15 +223,15 @@ export default function ShopItemsPage({ params }: { params: Promise<{ shopId: st
       <ShopItemsManager shopId={shopId} shopName={shop.name} language={language} isGm={isGm} />
       ) : (
         /* Player View: Shop Catalog + Shopping Cart */
-        activeCharacterId ? (
+        characterId ? (
           <div className="grid gap-6 lg:grid-cols-3">
             <div className="lg:col-span-2">
-              <ShopCatalog shopId={shopId} characterId={activeCharacterId} isGm={isGm} language={language} />
+              <ShopCatalog shopId={shopId} characterId={characterId} isGm={isGm} language={language} />
             </div>
             <div className="lg:col-span-1">
               <ShoppingCartComponent
                 shopId={shopId}
-                characterId={activeCharacterId}
+                characterId={characterId}
                 isGm={isGm}
                 language={language}
               />
@@ -223,8 +240,8 @@ export default function ShopItemsPage({ params }: { params: Promise<{ shopId: st
         ) : (
           <div className="p-8 text-center">
             <Package className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
-            <p className="text-lg font-semibold mb-2">No Character Selected</p>
-            <p className="text-muted-foreground mb-4">Please select a character to view and purchase items.</p>
+            <p className="text-lg font-semibold mb-2">No Character Assigned</p>
+            <p className="text-muted-foreground mb-4">You don't have a character assigned to this campaign. Please contact the Game Master.</p>
             <Button onClick={handleBack} variant="outline">
               <ArrowLeft className="w-4 h-4 mr-2" />
               Go Back

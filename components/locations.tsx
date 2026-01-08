@@ -9,7 +9,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { MapPin, Plus, Trash2 } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
-import { type Language, translations } from "@/lib/translations"
+import { useLanguage } from "@/lib/language-context"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useServices } from "@/hooks/use-services"
 import { ErrorService } from "@/lib/infrastructure/errors"
@@ -28,13 +28,13 @@ interface Campaign {
 }
 
 interface LocationsProps {
-  language: Language
+  language?: "es" // Mantener por compatibilidad, pero ya no se usa
   campaignId?: string
   onSelectLocation?: (locationId: string) => void
 }
 
 export function Locations({ language, campaignId, onSelectLocation }: LocationsProps) {
-  const t = translations[language]
+  const { t } = useLanguage()
   const { user } = useAuth()
   const services = useServices()
 

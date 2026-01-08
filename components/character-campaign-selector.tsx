@@ -11,14 +11,14 @@ import {
 } from "@/components/ui/dialog"
 import { useServices } from "@/hooks/use-services"
 import { useAuth } from "@/lib/auth-context"
-import { type Language, translations } from "@/lib/translations"
+import { useLanguage } from "@/lib/language-context"
 import type { Character } from "@/lib/infrastructure/repositories/character-repository"
 import type { CharacterWithCampaign } from "@/lib/infrastructure/repositories/character-repository"
 import { User, Plus, Check } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 interface CharacterCampaignSelectorProps {
-  language: Language
+  language?: "es" // Mantener por compatibilidad, pero ya no se usa
   open: boolean
   onOpenChange: (open: boolean) => void
   onSelect: (characterId: string) => void
@@ -32,7 +32,7 @@ export function CharacterCampaignSelector({
   onSelect,
   onCreateNew,
 }: CharacterCampaignSelectorProps) {
-  const t = translations[language]
+  const { t } = useLanguage()
   const { user } = useAuth()
   const services = useServices()
   const [assigned, setAssigned] = useState<CharacterWithCampaign[]>([])

@@ -14,11 +14,11 @@ import { User, ChevronDown } from "lucide-react"
 import { createBrowserClient } from "@/lib/supabase/client"
 import { useActiveCharacter } from "@/lib/active-character-context"
 import { useAuth } from "@/lib/auth-context"
-import { type Language, translations } from "@/lib/translations"
+import { useLanguage } from "@/lib/language-context"
 import type { Character } from "@/lib/infrastructure/repositories"
 
 interface CharacterSelectorProps {
-  language: Language
+  language?: "es" // Mantener por compatibilidad, pero ya no se usa
   onNavigateToCharacters: () => void
 }
 
@@ -27,7 +27,7 @@ export function CharacterSelector({ language, onNavigateToCharacters }: Characte
   const [activeCharacter, setActiveCharacter] = useState<Character | null>(null)
   const { activeCharacterId, setActiveCharacterId, refreshTrigger } = useActiveCharacter()
   const { user } = useAuth()
-  const t = translations[language]
+  const { t } = useLanguage()
 
   useEffect(() => {
     loadCharacters()

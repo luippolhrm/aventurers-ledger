@@ -5,22 +5,25 @@ import { useRouter } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Badge } from "@/components/ui/badge"
+import { Input } from "@/components/ui/input"
+import { Alert, AlertDescription } from "@/components/ui/alert"
 import { useAuth } from "@/lib/auth-context"
 import { useServices } from "@/hooks/use-services"
-import { type Language, translations } from "@/lib/translations"
+import { useLanguage } from "@/lib/language-context"
 import { LoadingState } from "@/components/molecules/loading"
 import { EmptyState } from "@/components/molecules/empty"
-import { LocationsMap } from "@/components/locations-map"
-import type { Campaign } from "@/lib/infrastructure/repositories"
-import { Crown, MapPin, ArrowLeft, Settings } from "lucide-react"
+import { LocationsMapContent } from "@/components/organisms/world"
+import type { Campaign, CampaignMemberWithDetails } from "@/lib/infrastructure/repositories"
+import { AlertCircle, Copy, Crown, LogOut, MapPin, ArrowLeft, Settings, Users } from "lucide-react"
 
 interface CampaignAdminViewProps {
   campaignId: string
-  language: Language
+  language?: "es" // Mantener por compatibilidad, pero ya no se usa
 }
 
 export function CampaignAdminView({ campaignId, language }: CampaignAdminViewProps) {
-  const t = translations[language]
+  const { t } = useLanguage()
   const router = useRouter()
   const { user } = useAuth()
   const services = useServices()
@@ -29,12 +32,24 @@ export function CampaignAdminView({ campaignId, language }: CampaignAdminViewPro
   const [isGM, setIsGM] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [success, setSuccess] = useState<string | null>(null)
+
+  const [members, setMembers] = useState<CampaignMemberWithDetails[]>([])
+  const [membersLoading, setMembersLoading] = useState(false)
+  const [membersError, setMembersError] = useState<string | null>(null)
+  const [inviteLoading, setInviteLoading] = useState(false)
 
   useEffect(() => {
     if (user && campaignId) {
       loadCampaignData()
     }
   }, [user, campaignId])
+
+  useEffect(() => {
+    if (!success) return
+    const timer = setTimeout(() => setSuccess(null), 4000)
+    return () => clearTimeout(timer)
+  }, [success])
 
   const loadCampaignData = async () => {
     if (!user) return
@@ -47,18 +62,84 @@ export function CampaignAdminView({ campaignId, language }: CampaignAdminViewPro
       const campaignData = await services.campaign.getCampaign(campaignId)
       setCampaign(campaignData)
 
-      // Verificar si es GM
-      const userIsGM = await services.campaign.isGameMaster(user.id, campaignId)
-      setIsGM(userIsGM)
+      // Verificar ownership directo (como con personajes)
+      const userIsOwner = campaignData.game_master_id === user.id
+      setIsGM(userIsOwner)
 
-      if (!userIsGM) {
+      if (!userIsOwner) {
         setError("No tienes permisos de administración para esta campaña")
+        return
       }
+
+      // Precargar miembros para la tab de Miembros
+      await loadMembers()
     } catch (err: any) {
       console.error("Error loading campaign:", err)
       setError(err?.message || "Error al cargar la campaña")
     } finally {
       setLoading(false)
+    }
+  }
+
+  const loadMembers = async () => {
+    if (!user) return
+    setMembersLoading(true)
+    setMembersError(null)
+    try {
+      const data = await services.campaign.getCampaignMembersWithDetails(campaignId)
+      setMembers(data)
+    } catch (err: any) {
+      console.error("Error loading members:", err)
+      setMembersError(err?.message || "Error al cargar miembros")
+    } finally {
+      setMembersLoading(false)
+    }
+  }
+
+  const handleCopyInviteCode = async () => {
+    if (!campaign?.invite_code) return
+    try {
+      await navigator.clipboard.writeText(campaign.invite_code)
+      setSuccess((t.campaigns as any)?.inviteCodeCopied || "Código copiado")
+    } catch (err) {
+      setMembersError("No se pudo copiar el código")
+    }
+  }
+
+  const handleRegenerateInviteCode = async () => {
+    if (!user) return
+    setInviteLoading(true)
+    setMembersError(null)
+    try {
+      const updated = await services.campaign.generateInviteCode(campaignId, user.id)
+      setCampaign(updated)
+      setSuccess("Nuevo código generado")
+    } catch (err: any) {
+      console.error("Error generating invite code:", err)
+      setMembersError(err?.message || "Error al generar el código")
+    } finally {
+      setInviteLoading(false)
+    }
+  }
+
+  const handleRemoveMember = async (member: CampaignMemberWithDetails) => {
+    if (!user) return
+    if (member.role === "game_master") return
+
+    const displayText = member.character_name
+      ? `${member.character_name} (${member.user_display_name || member.user_id})`
+      : member.user_display_name || member.user_id
+
+    if (!confirm(`¿Expulsar a ${displayText} de la campaña?`)) return
+
+    setMembersError(null)
+    try {
+      await services.campaign.removeMember(member.id, user.id, campaignId)
+      setSuccess("Miembro expulsado")
+      await loadMembers()
+    } catch (err: any) {
+      console.error("Error removing member:", err)
+      setMembersError(err?.message || "Error al expulsar miembro")
     }
   }
 
@@ -104,6 +185,12 @@ export function CampaignAdminView({ campaignId, language }: CampaignAdminViewPro
 
   return (
     <div className="w-full max-w-7xl mx-auto space-y-4 md:space-y-6 p-4 md:p-6">
+      {success && (
+        <Alert className="bg-green-50 text-green-900 border-green-200">
+          <AlertDescription>{success}</AlertDescription>
+        </Alert>
+      )}
+
       {/* Header */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 md:gap-4">
         <div className="w-full sm:flex-1">
@@ -126,10 +213,14 @@ export function CampaignAdminView({ campaignId, language }: CampaignAdminViewPro
 
       {/* Admin Tabs */}
       <Tabs defaultValue="map" className="w-full">
-        <TabsList className="grid w-full grid-cols-2">
+        <TabsList className="grid w-full grid-cols-3">
           <TabsTrigger value="map" className="flex items-center gap-2">
             <MapPin className="w-4 h-4" />
             Mapa y Ubicaciones
+          </TabsTrigger>
+          <TabsTrigger value="members" className="flex items-center gap-2">
+            <Users className="w-4 h-4" />
+            Miembros
           </TabsTrigger>
           <TabsTrigger value="settings" className="flex items-center gap-2">
             <Settings className="w-4 h-4" />
@@ -146,7 +237,90 @@ export function CampaignAdminView({ campaignId, language }: CampaignAdminViewPro
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <LocationsMap language={language} campaignId={campaignId} />
+              <LocationsMapContent campaignId={campaignId} />
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="members" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Miembros e Invitación</CardTitle>
+              <CardDescription>Comparte el código para que tus jugadores unan sus personajes</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {membersError && (
+                <Alert variant="destructive">
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertDescription>{membersError}</AlertDescription>
+                </Alert>
+              )}
+
+              <div className="space-y-2">
+                <p className="text-sm font-medium">Código de invitación</p>
+                <div className="flex gap-2">
+                  <Input value={campaign.invite_code || ""} readOnly />
+                  <Button variant="outline" onClick={handleCopyInviteCode} title="Copiar">
+                    <Copy className="h-4 w-4" />
+                  </Button>
+                </div>
+                <Button variant="outline" onClick={handleRegenerateInviteCode} disabled={inviteLoading}>
+                  Regenerar código
+                </Button>
+              </div>
+
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm font-medium">Miembros</p>
+                  <Button variant="outline" size="sm" onClick={loadMembers} disabled={membersLoading}>
+                    Recargar
+                  </Button>
+                </div>
+
+                {membersLoading ? (
+                  <LoadingState message="Cargando miembros..." size="sm" />
+                ) : members.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">Aún no hay miembros en esta campaña.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {members.map((member) => {
+                      const displayText =
+                        member.role === "game_master"
+                          ? member.user_display_name || member.user_id
+                          : member.character_name && member.user_display_name
+                            ? `${member.character_name} (${member.user_display_name})`
+                            : member.character_name || member.user_display_name || member.user_id
+
+                      return (
+                        <div key={member.id} className="flex items-center justify-between p-2 bg-muted rounded">
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm">{displayText}</span>
+                            <Badge variant={member.role === "game_master" ? "default" : "secondary"}>
+                              {member.role === "game_master" ? (
+                                <span className="flex items-center gap-1">
+                                  <Crown className="h-3 w-3" /> GM
+                                </span>
+                              ) : (
+                                <span>Jugador</span>
+                              )}
+                            </Badge>
+                          </div>
+                          {member.role !== "game_master" && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleRemoveMember(member)}
+                              title="Expulsar"
+                            >
+                              <LogOut className="h-4 w-4" />
+                            </Button>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
             </CardContent>
           </Card>
         </TabsContent>
@@ -156,20 +330,13 @@ export function CampaignAdminView({ campaignId, language }: CampaignAdminViewPro
             <CardHeader>
               <CardTitle>Configuración de Campaña</CardTitle>
               <CardDescription>
-                Gestiona miembros y configuración general de la campaña
+                Configuración general de la campaña
               </CardDescription>
             </CardHeader>
             <CardContent>
               <p className="text-muted-foreground">
-                La configuración de miembros y otras opciones se gestionan desde la vista principal de campañas.
+                Próximamente: opciones de estado (pausada/completada/archivada), notas del GM y más.
               </p>
-              <Button
-                variant="outline"
-                onClick={() => router.push("/dashboard?module=campaigns")}
-                className="mt-4"
-              >
-                Ir a Gestión de Campañas
-              </Button>
             </CardContent>
           </Card>
         </TabsContent>

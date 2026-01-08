@@ -14,6 +14,7 @@ import {
   LocationService,
   ShopItemService,
   NpcService,
+  FeatService,
 } from "@/lib/application/services"
 
 /**
@@ -45,6 +46,7 @@ export function useServices() {
       location: new LocationService(),
       shopItem: new ShopItemService(),
       npc: new NpcService(),
+      feat: FeatService, // Servicio estático, no necesita instancia
     }),
     []
   )

@@ -14,6 +14,62 @@ export interface Character {
   archived: boolean
   created_at: string
   updated_at?: string | null
+  // D&D 5e Ability Scores
+  strength?: number | null
+  dexterity?: number | null
+  constitution?: number | null
+  intelligence?: number | null
+  wisdom?: number | null
+  charisma?: number | null
+  // Character size (affects carrying capacity)
+  size?: "small" | "medium" | "large" | null
+  // Background and alignment
+  background?: string | null
+  alignment?: string | null
+  experience_points?: number | null
+  // Carrying capacity (already exists from script 036)
+  carrying_capacity?: number | null
+  // Preparation notes (already exists from script 036)
+  preparation_notes?: string | null
+  // Traits raciales (D&D 2024)
+  racial_traits?: string[] | null
+  // Background (D&D 2024)
+  character_background?: string | null
+  // Bonificaciones de Background (D&D 2024)
+  background_ability_bonuses?: {
+    strength?: number
+    dexterity?: number
+    constitution?: number
+    intelligence?: number
+    wisdom?: number
+    charisma?: number
+  } | null
+  // Bonificaciones de Raza (D&D 2014)
+  racial_ability_bonuses?: {
+    strength?: number
+    dexterity?: number
+    constitution?: number
+    intelligence?: number
+    wisdom?: number
+    charisma?: number
+  } | null
+  // Subraza (D&D 2014)
+  subrace?: string | null
+  // Linaje seleccionado (D&D 2024, para especies con linajes como Elfos)
+  selected_lineage?: string | null
+  // Campos específicos de Humanos (D&D 2024)
+  human_skill_proficiency?: string | null // Habilidad seleccionada para "Diestro"
+  selected_origin_feat?: string | null // Dote de origen seleccionada para "Versátil"
+  // Campo específico de Goliat (D&D 2024)
+  goliath_giant_lineage?: string | null // Linaje gigante seleccionado ("fire", "hill", "cloud", "frost", "stone", "storm")
+  // Sistema de reglas
+  rules_system?: "5e_2014" | "5e_2024" | null
+  // Bonificadores de compra/tienda (referencia)
+  shop_bonuses?: {
+    discount_percent?: number
+    negotiation_bonus?: number
+    // Otros bonificadores posibles
+  } | null
 }
 
 export interface CharacterWithCampaign extends Character {

@@ -8,20 +8,20 @@ import { Button } from "@/components/ui/button"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Label } from "@/components/ui/label"
 import { Coins, ArrowRightLeft } from "lucide-react"
-import { type Language, translations } from "@/lib/translations"
+import { useLanguage } from "@/lib/language-context"
 import {
   CurrencyConverterService,
   type CurrencyType,
 } from "@/lib/application/services"
 
 interface CurrencyExchangeCardProps {
-  language: Language
+  language?: "es" // Mantener por compatibilidad, pero ya no se usa
 }
 
 export function CurrencyExchangeCard({ language }: CurrencyExchangeCardProps) {
-  const t = translations[language].card
+  const { t } = useLanguage()
   const converterService = new CurrencyConverterService()
-  const currencies = converterService.getCurrencies(language)
+  const currencies = converterService.getCurrencies("es") // Always Spanish now
 
   const [fromCurrency, setFromCurrency] = useState<CurrencyType>("GP")
   const [toCurrency, setToCurrency] = useState<CurrencyType>("SP")
@@ -57,7 +57,7 @@ export function CurrencyExchangeCard({ language }: CurrencyExchangeCardProps) {
 
     const displayResult = converterService.formatResult(result)
 
-    return t.resultText(
+    return t.card.resultText(
       amount,
       fromCurrencyData?.text || "",
       fromCurrencyData?.id || "",
@@ -76,13 +76,13 @@ export function CurrencyExchangeCard({ language }: CurrencyExchangeCardProps) {
               <Coins className="h-6 w-6 md:h-8 md:w-8 text-primary" />
             </div>
           </div>
-          <CardTitle className="text-xl md:text-2xl lg:text-3xl">{t.title}</CardTitle>
-          <CardDescription className="text-sm md:text-base">{t.description}</CardDescription>
+          <CardTitle className="text-xl md:text-2xl lg:text-3xl">{t.card.title}</CardTitle>
+          <CardDescription className="text-sm md:text-base">{t.card.description}</CardDescription>
         </CardHeader>
         <CardContent className="p-4 md:p-6 space-y-4 md:space-y-6">
         <div className="flex gap-4">
           <div className="flex-1 space-y-2">
-            <Label htmlFor="from-currency">{t.fromCurrency}</Label>
+            <Label htmlFor="from-currency">{t.card.fromCurrency}</Label>
             <Select
               value={fromCurrency}
               onValueChange={(value) => {
@@ -91,7 +91,7 @@ export function CurrencyExchangeCard({ language }: CurrencyExchangeCardProps) {
               }}
             >
               <SelectTrigger id="from-currency">
-                <SelectValue placeholder={t.selectCurrency} />
+                <SelectValue placeholder={t.card.selectCurrency} />
               </SelectTrigger>
               <SelectContent>
                 {currencies.map((currency) => (
@@ -104,11 +104,11 @@ export function CurrencyExchangeCard({ language }: CurrencyExchangeCardProps) {
           </div>
 
           <div className="flex-1 space-y-2">
-            <Label htmlFor="amount">{t.amount}</Label>
+            <Label htmlFor="amount">{t.card.amount}</Label>
             <Input
               id="amount"
               type="number"
-              placeholder={t.enterAmount}
+              placeholder={t.card.enterAmount}
               value={amount}
               onChange={(e) => {
                 setAmount(e.target.value)
@@ -127,7 +127,7 @@ export function CurrencyExchangeCard({ language }: CurrencyExchangeCardProps) {
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="to-currency">{t.toCurrency}</Label>
+          <Label htmlFor="to-currency">{t.card.toCurrency}</Label>
           <Select
             value={toCurrency}
             onValueChange={(value) => {
@@ -136,7 +136,7 @@ export function CurrencyExchangeCard({ language }: CurrencyExchangeCardProps) {
             }}
           >
             <SelectTrigger id="to-currency">
-              <SelectValue placeholder={t.selectCurrency} />
+              <SelectValue placeholder={t.card.selectCurrency} />
             </SelectTrigger>
             <SelectContent>
               {currencies.map((currency) => (
@@ -149,7 +149,7 @@ export function CurrencyExchangeCard({ language }: CurrencyExchangeCardProps) {
         </div>
 
         <Button onClick={handleConvert} className="w-full text-base font-semibold" size="lg">
-          {t.transform}
+          {t.card.transform}
         </Button>
 
         {result !== null && (

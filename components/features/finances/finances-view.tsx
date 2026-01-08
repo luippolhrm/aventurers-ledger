@@ -8,15 +8,14 @@ import { EmptyState } from "@/components/molecules/empty"
 import { useServices } from "@/hooks/use-services"
 import { useActiveCharacter } from "@/lib/active-character-context"
 import { Coins } from "lucide-react"
-import type { Language } from "@/lib/translations"
-import { translations } from "@/lib/translations"
+import { useLanguage } from "@/lib/language-context"
 import type { WalletData } from "@/lib/infrastructure/repositories"
 // Por ahora, importamos el componente original para mantener la funcionalidad
 // En el futuro, estos tabs se pueden refactorizar en componentes separados
 import { Finances } from "@/components/finances"
 
 interface FinancesViewProps {
-  language: Language
+  language?: "es" // Mantener por compatibilidad, pero ya no se usa
 }
 
 /**
@@ -28,6 +27,7 @@ export function FinancesView({ language }: FinancesViewProps) {
   const [wallet, setWallet] = useState<WalletData | null>(null)
   const [loading, setLoading] = useState(true)
   const services = useServices()
+  const { t } = useLanguage()
 
   useEffect(() => {
     if (activeCharacter) {

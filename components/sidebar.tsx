@@ -4,18 +4,18 @@ import { cn } from "@/lib/utils"
 import { Coins, Menu, X, Users, Home, DollarSign, Package, Map, Settings, User, Store } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useState } from "react"
-import { type Language, translations } from "@/lib/translations"
+import { useLanguage } from "@/lib/language-context"
 
 interface SidebarProps {
   activeModule: string
   onModuleChange: (module: string) => void
-  language: Language
+  language?: "es" // Mantener por compatibilidad, pero ya no se usa
   includeProfileSettings?: boolean
 }
 
 export function Sidebar({ activeModule, onModuleChange, language, includeProfileSettings = false }: SidebarProps) {
   const [isMobileOpen, setIsMobileOpen] = useState(false)
-  const t = translations[language]
+  const { t } = useLanguage()
 
   const mainModules = [
     {

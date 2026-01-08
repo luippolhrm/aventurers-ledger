@@ -7,6 +7,7 @@ export interface Location {
   name: string
   description: string | null
   campaign_id: string
+  location_type: string | null
   created_at: string
   updated_at: string | null
 }

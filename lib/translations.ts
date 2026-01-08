@@ -119,6 +119,49 @@ export const translations = {
         warlock: "Warlock",
         wizard: "Wizard",
       },
+      // Ability Scores
+      abilityScores: "Ability Scores",
+      strength: "Strength",
+      dexterity: "Dexterity",
+      constitution: "Constitution",
+      intelligence: "Intelligence",
+      wisdom: "Wisdom",
+      charisma: "Charisma",
+      modifier: "Modifier",
+      // Size
+      size: "Size",
+      sizeSmall: "Small",
+      sizeMedium: "Medium",
+      sizeLarge: "Large",
+      // Carrying Capacity
+      carryingCapacity: "Carrying Capacity",
+      currentWeight: "Current Weight",
+      maxCapacity: "Max Capacity",
+      capacityStatus: {
+        light: "Light Load",
+        medium: "Medium Load",
+        heavy: "Heavy Load",
+        overloaded: "Overloaded",
+      },
+      // Background
+      background: "Background",
+      alignment: "Alignment",
+      experiencePoints: "Experience Points",
+      // Sections
+      sections: {
+        basic: "Basic Information",
+        abilityScores: "Attributes",
+        background: "Background",
+        notes: "Notes",
+      },
+      // Validation messages
+      validation: {
+        nameRequired: "Name is required",
+        raceRequired: "Race is required",
+        abilityScoreRange: "Ability score must be between 1 and 30",
+        levelRange: "Level must be between 1 and 20",
+        invalidSize: "Size must be: small, medium or large",
+      },
     },
     currencies: {
       platinum: "Platinum",
@@ -928,6 +971,49 @@ export const translations = {
         sorcerer: "Hechicero",
         warlock: "Brujo",
         wizard: "Mago",
+      },
+      // Ability Scores
+      abilityScores: "Atributos",
+      strength: "Fuerza",
+      dexterity: "Destreza",
+      constitution: "Constitución",
+      intelligence: "Inteligencia",
+      wisdom: "Sabiduría",
+      charisma: "Carisma",
+      modifier: "Modificador",
+      // Size
+      size: "Tamaño",
+      sizeSmall: "Pequeño",
+      sizeMedium: "Mediano",
+      sizeLarge: "Grande",
+      // Carrying Capacity
+      carryingCapacity: "Capacidad de Carga",
+      currentWeight: "Peso Actual",
+      maxCapacity: "Capacidad Máxima",
+      capacityStatus: {
+        light: "Carga Ligera",
+        medium: "Carga Media",
+        heavy: "Carga Pesada",
+        overloaded: "Sobrecargado",
+      },
+      // Background
+      background: "Trasfondo",
+      alignment: "Alineamiento",
+      experiencePoints: "Puntos de Experiencia",
+      // Sections
+      sections: {
+        basic: "Información Básica",
+        abilityScores: "Atributos",
+        background: "Trasfondo",
+        notes: "Notas",
+      },
+      // Validation messages
+      validation: {
+        nameRequired: "El nombre es requerido",
+        raceRequired: "La raza es requerida",
+        abilityScoreRange: "El atributo debe estar entre 1 y 30",
+        levelRange: "El nivel debe estar entre 1 y 20",
+        invalidSize: "El tamaño debe ser: pequeño, mediano o grande",
       },
     },
     currencies: {

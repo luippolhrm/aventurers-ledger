@@ -9,14 +9,14 @@ import { Package, Pencil, Trash2, Plus, Edit } from "lucide-react"
 import { createBrowserClient } from "@/lib/supabase/client"
 import { useAuth } from "@/lib/auth-context"
 import { useToast } from "@/hooks/use-toast"
-import { translations, type Language } from "@/lib/translations"
+import { useLanguage } from "@/lib/language-context"
 import type { ShopItemExtended } from "@/lib/types/shop-item"
 import { ShopItemForm } from "./shop-item-form"
 
 interface ShopItemsManagerProps {
   shopId: string
   shopName: string
-  language: Language
+  language?: "es" // Mantener por compatibilidad, pero ya no se usa
   isGm: boolean
 }
 
@@ -28,7 +28,7 @@ interface ShopItemRow extends ShopItemExtended {
 }
 
 export function ShopItemsManager({ shopId, shopName, language, isGm }: ShopItemsManagerProps) {
-  const t = translations[language]
+  const { t } = useLanguage()
   const supabase = createBrowserClient()
   const { user } = useAuth()
   const { toast } = useToast()

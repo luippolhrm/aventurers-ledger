@@ -8,7 +8,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { ShoppingCart, Loader2, AlertCircle, CheckCircle2 } from "lucide-react"
 import { useShoppingCart } from "@/hooks/use-shopping-cart"
 import { CartItem } from "@/components/cart-item"
-import { type Language, translations } from "@/lib/translations"
+import { useLanguage } from "@/lib/language-context"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { formatPriceInGold } from "@/lib/utils"
 import { useToast } from "@/hooks/use-toast"
@@ -19,11 +19,11 @@ interface ShoppingCartProps {
   shopId: string
   characterId: string
   isGm: boolean
-  language: Language
+  language?: "es" // Mantener por compatibilidad, pero ya no se usa
 }
 
 export function ShoppingCartComponent({ shopId, characterId, isGm, language }: ShoppingCartProps) {
-  const t = translations[language]
+  const { t } = useLanguage()
   const router = useRouter()
   const { toast } = useToast()
   const services = useServices()

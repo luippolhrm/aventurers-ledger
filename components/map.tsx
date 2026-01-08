@@ -1,10 +1,8 @@
 "use client"
 
 import { LocationsMap } from "./locations-map"
-import { type Language } from "@/lib/translations"
-
 interface MapProps {
-  language: Language
+  language?: "es" // Mantener por compatibilidad, pero ya no se usa
 }
 
 export function Map({ language }: MapProps) {

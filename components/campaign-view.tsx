@@ -5,27 +5,27 @@ import { useRouter, useSearchParams } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Badge } from "@/components/ui/badge"
+import { Input } from "@/components/ui/input"
+import { Alert, AlertDescription } from "@/components/ui/alert"
 import { useAuth } from "@/lib/auth-context"
 import { useServices } from "@/hooks/use-services"
-import { type Language, translations } from "@/lib/translations"
+import { useLanguage } from "@/lib/language-context"
 import { LoadingState } from "@/components/molecules/loading"
 import { EmptyState } from "@/components/molecules/empty"
-import { WalletManager } from "@/components/wallet-manager"
-import { Finances } from "@/components/finances"
-import { Inventory } from "@/components/inventory"
-import { Movements } from "@/components/movements"
-import { CampaignWorldView } from "@/components/campaign-world-view"
-import type { Campaign } from "@/lib/infrastructure/repositories"
+import { PlayerCampaignTabs } from "@/components/features/campaigns"
+import { LocationsMapContent } from "@/components/organisms/world"
+import type { Campaign, CampaignMemberWithDetails } from "@/lib/infrastructure/repositories"
 import type { Character } from "@/lib/infrastructure/repositories/character-repository"
-import { Crown, Sword, Settings, MapPin, Coins, Package, ArrowLeft, Globe } from "lucide-react"
+import { Crown, Sword, Settings, MapPin, ArrowLeft, Info, Copy, LogOut, Users, AlertCircle } from "lucide-react"
 
 interface CampaignViewProps {
   campaignId: string
-  language: Language
+  language?: "es" // Mantener por compatibilidad, pero ya no se usa
 }
 
 export function CampaignView({ campaignId, language }: CampaignViewProps) {
-  const t = translations[language]
+  const { t } = useLanguage()
   const router = useRouter()
   const searchParams = useSearchParams()
   const { user } = useAuth()
@@ -33,15 +33,27 @@ export function CampaignView({ campaignId, language }: CampaignViewProps) {
 
   const [campaign, setCampaign] = useState<Campaign | null>(null)
   const [character, setCharacter] = useState<Character | null>(null)
-  const [isGM, setIsGM] = useState(false)
+  const [isOwner, setIsOwner] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [success, setSuccess] = useState<string | null>(null)
+
+  const [members, setMembers] = useState<CampaignMemberWithDetails[]>([])
+  const [membersLoading, setMembersLoading] = useState(false)
+  const [membersError, setMembersError] = useState<string | null>(null)
+  const [inviteLoading, setInviteLoading] = useState(false)
 
   useEffect(() => {
     if (user && campaignId) {
       loadCampaignData()
     }
   }, [user, campaignId])
+
+  useEffect(() => {
+    if (!success) return
+    const timer = setTimeout(() => setSuccess(null), 4000)
+    return () => clearTimeout(timer)
+  }, [success])
 
   const loadCampaignData = async () => {
     if (!user) return
@@ -54,12 +66,17 @@ export function CampaignView({ campaignId, language }: CampaignViewProps) {
       const campaignData = await services.campaign.getCampaign(campaignId)
       setCampaign(campaignData)
 
-      // Verificar si es GM
-      const userIsGM = await services.campaign.isGameMaster(user.id, campaignId)
-      setIsGM(userIsGM)
+      // Verificar ownership directo (como con personajes)
+      const userIsOwner = campaignData.game_master_id === user.id
+      setIsOwner(userIsOwner)
+
+      // Si es owner, precargar miembros
+      if (userIsOwner) {
+        await loadMembers()
+      }
 
       // Si es jugador, obtener su personaje
-      if (!userIsGM) {
+      if (!userIsOwner) {
         // Si hay characterId en la URL, usarlo directamente
         const characterIdFromUrl = searchParams?.get("characterId")
         let characterLoaded = false
@@ -95,6 +112,68 @@ export function CampaignView({ campaignId, language }: CampaignViewProps) {
       setError(err?.message || "Error al cargar la campaña")
     } finally {
       setLoading(false)
+    }
+  }
+
+  const loadMembers = async () => {
+    if (!user) return
+    setMembersLoading(true)
+    setMembersError(null)
+    try {
+      const data = await services.campaign.getCampaignMembersWithDetails(campaignId)
+      setMembers(data)
+    } catch (err: any) {
+      console.error("Error loading members:", err)
+      setMembersError(err?.message || "Error al cargar miembros")
+    } finally {
+      setMembersLoading(false)
+    }
+  }
+
+  const handleCopyInviteCode = async () => {
+    if (!campaign?.invite_code) return
+    try {
+      await navigator.clipboard.writeText(campaign.invite_code)
+      setSuccess((t.campaigns as any)?.inviteCodeCopied || "Código copiado")
+    } catch (err) {
+      setMembersError("No se pudo copiar el código")
+    }
+  }
+
+  const handleRegenerateInviteCode = async () => {
+    if (!user) return
+    setInviteLoading(true)
+    setMembersError(null)
+    try {
+      const updated = await services.campaign.generateInviteCode(campaignId, user.id)
+      setCampaign(updated)
+      setSuccess("Nuevo código generado")
+    } catch (err: any) {
+      console.error("Error generating invite code:", err)
+      setMembersError(err?.message || "Error al generar el código")
+    } finally {
+      setInviteLoading(false)
+    }
+  }
+
+  const handleRemoveMember = async (member: CampaignMemberWithDetails) => {
+    if (!user) return
+    if (member.role === "game_master") return
+
+    const displayText = member.character_name
+      ? `${member.character_name} (${member.user_display_name || member.user_id})`
+      : member.user_display_name || member.user_id
+
+    if (!confirm(`¿Expulsar a ${displayText} de la campaña?`)) return
+
+    setMembersError(null)
+    try {
+      await services.campaign.removeMember(member.id, user.id, campaignId)
+      setSuccess("Miembro expulsado")
+      await loadMembers()
+    } catch (err: any) {
+      console.error("Error removing member:", err)
+      setMembersError(err?.message || "Error al expulsar miembro")
     }
   }
 
@@ -140,7 +219,7 @@ export function CampaignView({ campaignId, language }: CampaignViewProps) {
             <p className="text-sm md:text-base text-muted-foreground mt-2">{campaign.description}</p>
           )}
         </div>
-        {isGM && (
+        {isOwner && (
           <div className="flex items-center gap-2">
             <Crown className="w-4 h-4 md:w-5 md:h-5 text-purple-600" />
             <span className="font-semibold text-purple-600 text-sm md:text-base">Game Master</span>
@@ -149,95 +228,190 @@ export function CampaignView({ campaignId, language }: CampaignViewProps) {
       </div>
 
       {/* Content based on role */}
-      {isGM ? (
-        <Card>
-          <CardHeader>
-            <CardTitle>Administración de Campaña</CardTitle>
-            <CardDescription>
-              Gestiona ubicaciones, tiendas, NPCs y miembros de la campaña
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <Button
-                variant="outline"
-                className="h-auto p-4 flex flex-col items-start gap-2"
-                onClick={() => router.push(`/campaigns/${campaignId}/admin`)}
-              >
-                <MapPin className="w-6 h-6" />
-                <div className="text-left">
-                  <div className="font-semibold">Mapa y Ubicaciones</div>
-                  <div className="text-sm text-muted-foreground">
-                    Gestiona ubicaciones, tiendas y NPCs
+      {isOwner ? (
+        <>
+          {success && (
+            <Alert className="bg-green-50 text-green-900 border-green-200">
+              <AlertDescription>{success}</AlertDescription>
+            </Alert>
+          )}
+
+          <Tabs defaultValue="info" className="w-full">
+            <TabsList className="grid w-full grid-cols-4">
+              <TabsTrigger value="info" className="flex items-center gap-2">
+                <Info className="w-4 h-4" />
+                Información
+              </TabsTrigger>
+              <TabsTrigger value="members" className="flex items-center gap-2">
+                <Users className="w-4 h-4" />
+                Miembros
+              </TabsTrigger>
+              <TabsTrigger value="map" className="flex items-center gap-2">
+                <MapPin className="w-4 h-4" />
+                Mapa y Ubicaciones
+              </TabsTrigger>
+              <TabsTrigger value="settings" className="flex items-center gap-2">
+                <Settings className="w-4 h-4" />
+                Configuración
+              </TabsTrigger>
+            </TabsList>
+
+            {/* Tab Información */}
+            <TabsContent value="info" className="space-y-4">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Información de la Campaña</CardTitle>
+                  <CardDescription>Datos básicos y código de invitación</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="space-y-2">
+                    <p className="text-sm font-medium">Nombre</p>
+                    <p className="text-base">{campaign.name}</p>
                   </div>
-                </div>
-              </Button>
-              <Button
-                variant="outline"
-                className="h-auto p-4 flex flex-col items-start gap-2"
-                onClick={() => router.push(`/campaigns/${campaignId}/admin?tab=settings`)}
-              >
-                <Settings className="w-6 h-6" />
-                <div className="text-left">
-                  <div className="font-semibold">Configuración</div>
-                  <div className="text-sm text-muted-foreground">
-                    Gestiona miembros y configuración de la campaña
+                  {campaign.description && (
+                    <div className="space-y-2">
+                      <p className="text-sm font-medium">Descripción</p>
+                      <p className="text-base text-muted-foreground">{campaign.description}</p>
+                    </div>
+                  )}
+                  <div className="space-y-2">
+                    <p className="text-sm font-medium">Estado</p>
+                    <Badge variant={campaign.status === "active" ? "default" : "secondary"}>
+                      {campaign.status === "active"
+                        ? "Activa"
+                        : campaign.status === "archived"
+                          ? "Archivada"
+                          : campaign.status}
+                    </Badge>
                   </div>
-                </div>
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
+                  <div className="space-y-2">
+                    <p className="text-sm font-medium">Código de invitación</p>
+                    <div className="flex gap-2">
+                      <Input value={campaign.invite_code || ""} readOnly className="font-mono" />
+                      <Button variant="outline" onClick={handleCopyInviteCode} title="Copiar">
+                        <Copy className="h-4 w-4" />
+                      </Button>
+                    </div>
+                    <Button variant="outline" onClick={handleRegenerateInviteCode} disabled={inviteLoading} size="sm">
+                      Regenerar código
+                    </Button>
+                    <p className="text-xs text-muted-foreground">
+                      Comparte este código con tus jugadores para que unan sus personajes a la campaña
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            {/* Tab Miembros */}
+            <TabsContent value="members" className="space-y-4">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Miembros de la Campaña</CardTitle>
+                  <CardDescription>Gestiona los jugadores que participan en esta campaña</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {membersError && (
+                    <Alert variant="destructive">
+                      <AlertCircle className="h-4 w-4" />
+                      <AlertDescription>{membersError}</AlertDescription>
+                    </Alert>
+                  )}
+
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm font-medium">Lista de miembros</p>
+                    <Button variant="outline" size="sm" onClick={loadMembers} disabled={membersLoading}>
+                      Recargar
+                    </Button>
+                  </div>
+
+                  {membersLoading ? (
+                    <LoadingState message="Cargando miembros..." size="sm" />
+                  ) : members.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">Aún no hay miembros en esta campaña.</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {members.map((member) => {
+                        const displayText =
+                          member.role === "game_master"
+                            ? member.user_display_name || member.user_id
+                            : member.character_name && member.user_display_name
+                              ? `${member.character_name} (${member.user_display_name})`
+                              : member.character_name || member.user_display_name || member.user_id
+
+                        return (
+                          <div key={member.id} className="flex items-center justify-between p-2 bg-muted rounded">
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm">{displayText}</span>
+                              <Badge variant={member.role === "game_master" ? "default" : "secondary"}>
+                                {member.role === "game_master" ? (
+                                  <span className="flex items-center gap-1">
+                                    <Crown className="h-3 w-3" /> GM
+                                  </span>
+                                ) : (
+                                  <span>Jugador</span>
+                                )}
+                              </Badge>
+                            </div>
+                            {member.role !== "game_master" && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleRemoveMember(member)}
+                                title="Expulsar"
+                              >
+                                <LogOut className="h-4 w-4" />
+                              </Button>
+                            )}
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            {/* Tab Mapa y Ubicaciones */}
+            <TabsContent value="map" className="space-y-4">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Mapa y Ubicaciones</CardTitle>
+                  <CardDescription>
+                    Gestiona ubicaciones, tiendas y NPCs de la campaña
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <LocationsMapContent campaignId={campaignId} />
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            {/* Tab Configuración */}
+            <TabsContent value="settings" className="space-y-4">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Configuración de Campaña</CardTitle>
+                  <CardDescription>
+                    Configuración general y opciones avanzadas
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-muted-foreground">
+                    Próximamente: opciones de estado (pausada/completada/archivada), notas del GM y más.
+                  </p>
+                </CardContent>
+              </Card>
+            </TabsContent>
+          </Tabs>
+        </>
       ) : character ? (
-        <Tabs defaultValue="overview" className="w-full">
-          <TabsList className="grid w-full grid-cols-5">
-            <TabsTrigger value="overview">Resumen</TabsTrigger>
-            <TabsTrigger value="wallet">Monedero</TabsTrigger>
-            <TabsTrigger value="inventory">Inventario</TabsTrigger>
-            <TabsTrigger value="movements">Movimientos</TabsTrigger>
-            <TabsTrigger value="world">
-              <Globe className="w-4 h-4 mr-2" />
-              Mundo
-            </TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="overview" className="space-y-4">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Sword className="w-5 h-5" />
-                  {character.name}
-                </CardTitle>
-                <CardDescription>
-                  {character.race}
-                  {character.class && ` • ${character.class}`}
-                  {character.level && ` • Nivel ${character.level}`}
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <p className="text-sm text-muted-foreground">
-                  Personaje asignado a esta campaña. Usa las pestañas para gestionar tu monedero, inventario y movimientos.
-                </p>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="wallet" className="space-y-4">
-            <WalletManager language={language} characterId={character.id} />
-          </TabsContent>
-
-          <TabsContent value="inventory" className="space-y-4">
-            <Inventory language={language} characterId={character.id} campaignId={campaignId} />
-          </TabsContent>
-
-          <TabsContent value="movements" className="space-y-4">
-            <Movements language={language} characterId={character.id} />
-          </TabsContent>
-
-          <TabsContent value="world" className="space-y-4">
-            <CampaignWorldView campaignId={campaignId} language={language} />
-          </TabsContent>
-        </Tabs>
+        <PlayerCampaignTabs
+          characterId={character.id}
+          campaignId={campaignId}
+          language={language}
+          variant="default"
+        />
       ) : (
         <Card>
           <CardContent className="pt-6">

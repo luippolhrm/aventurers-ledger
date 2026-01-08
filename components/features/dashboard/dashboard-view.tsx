@@ -13,8 +13,7 @@ import { useServices } from "@/hooks/use-services"
 import { useActiveCharacter } from "@/lib/active-character-context"
 import { useAuth } from "@/lib/auth-context"
 import { Sword, Coins, Users, Map, ArrowRight } from "lucide-react"
-import type { Language } from "@/lib/translations"
-import { translations } from "@/lib/translations"
+import { useLanguage } from "@/lib/language-context"
 import type { WalletData } from "@/lib/infrastructure/repositories"
 import type { Campaign } from "@/lib/infrastructure/repositories"
 
@@ -26,7 +25,7 @@ type CampaignForDashboard = Campaign & {
 }
 
 interface DashboardViewProps {
-  language: Language
+  language?: "es" // Mantener por compatibilidad, pero ya no se usa
   onNavigate: (module: string) => void
 }
 
@@ -34,7 +33,7 @@ interface DashboardViewProps {
  * Vista refactorizada del Dashboard usando nuevos componentes
  */
 export function DashboardView({ language, onNavigate }: DashboardViewProps) {
-  const t = translations[language]
+  const { t } = useLanguage()
   const { user } = useAuth()
   const { activeCharacter } = useActiveCharacter()
   const [wallet, setWallet] = useState<WalletData | null>(null)

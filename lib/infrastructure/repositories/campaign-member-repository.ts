@@ -122,17 +122,26 @@ export class SupabaseCampaignMemberRepository implements CampaignMemberRepositor
   }
 
   async getByCampaignId(campaignId: string): Promise<CampaignMember[]> {
-    const { data, error } = await this.supabase
-      .from("campaign_members")
-      .select("*")
-      .eq("campaign_id", campaignId)
-      .order("joined_at", { ascending: true })
+    // Usar función RPC que bypass RLS de forma segura
+    // Esta función permite a GMs ver todos los miembros de sus campañas
+    const { data, error } = await this.supabase.rpc("get_campaign_members", {
+      campaign_uuid: campaignId,
+    })
 
     if (error) {
       throw ErrorService.fromSupabaseError(error)
     }
 
-    return (data || []).map(this.mapToCampaignMember)
+    // La función RPC retorna campaign_member_result type (sin campaign_id)
+    // Mapear al tipo CampaignMember incluyendo campaign_id
+    return (data || []).map((row: any) => ({
+      id: row.id,
+      campaign_id: campaignId, // La función no retorna esto, pero lo tenemos como parámetro
+      user_id: row.user_id,
+      character_id: row.character_id || null,
+      role: row.role as CampaignMemberRole,
+      joined_at: row.joined_at,
+    }))
   }
 
   async getByUserId(userId: string): Promise<CampaignMember[]> {

@@ -125,6 +125,22 @@ export class CampaignService {
   }
 
   /**
+   * Archiva una campaña (equivalente a "desactivar" en personajes)
+   * Solo el GM puede hacerlo.
+   */
+  async archiveCampaign(campaignId: string, userId: string): Promise<Campaign> {
+    return this.updateCampaign(campaignId, { status: "archived" }, userId)
+  }
+
+  /**
+   * Reactiva una campaña archivada
+   * Solo el GM puede hacerlo.
+   */
+  async unarchiveCampaign(campaignId: string, userId: string): Promise<Campaign> {
+    return this.updateCampaign(campaignId, { status: "active" }, userId)
+  }
+
+  /**
    * Elimina una campaña (solo el GM puede hacerlo)
    */
   async deleteCampaign(campaignId: string, userId: string): Promise<void> {

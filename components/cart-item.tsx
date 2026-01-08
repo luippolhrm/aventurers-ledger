@@ -6,14 +6,14 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Trash2, Minus, Plus } from "lucide-react"
 import type { ShoppingCartItem } from "@/lib/services/shopping-cart-service"
-import { type Language, translations } from "@/lib/translations"
+import { useLanguage } from "@/lib/language-context"
 import { formatPriceInGold } from "@/lib/utils"
 
 interface CartItemProps {
   item: ShoppingCartItem
   onUpdateQuantity: (cartItemId: string, quantity: number) => Promise<void>
   onRemove: (cartItemId: string) => Promise<void>
-  language: Language
+  language?: "es" // Mantener por compatibilidad, pero ya no se usa
 }
 
 function getRarityColor(rarity: string | null | undefined): string {
@@ -31,7 +31,7 @@ function getRarityColor(rarity: string | null | undefined): string {
 }
 
 export function CartItem({ item, onUpdateQuantity, onRemove, language }: CartItemProps) {
-  const t = translations[language]
+  const { t } = useLanguage()
   const shopItem = item.shop_item
   const [quantity, setQuantity] = useState(item.quantity.toString())
   const [isUpdating, setIsUpdating] = useState(false)

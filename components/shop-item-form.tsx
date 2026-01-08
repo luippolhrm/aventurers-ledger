@@ -6,12 +6,12 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { translations, type Language } from "@/lib/translations"
+import { useLanguage } from "@/lib/language-context"
 import type { ShopItemExtended } from "@/lib/types/shop-item"
 import { ItemFormConfigService, type ItemCategory } from "@/lib/services/item-form-config"
 
 interface ShopItemFormProps {
-  language: Language
+  language?: "es" // Mantener por compatibilidad, pero ya no se usa
   initialData?: Partial<ShopItemExtended>
   onSubmit: (data: Partial<ShopItemExtended>) => void
   onCancel: () => void
@@ -50,7 +50,7 @@ const PROPERTY_OPTIONS = [
 ] as const
 
 export function ShopItemForm({ language, initialData, onSubmit, onCancel, isLoading }: ShopItemFormProps) {
-  const t = translations[language]
+  const { t } = useLanguage()
 
   const [formData, setFormData] = useState<Partial<ShopItemExtended>>({
     item_name: initialData?.item_name || "",

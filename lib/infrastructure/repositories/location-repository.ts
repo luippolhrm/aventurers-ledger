@@ -120,6 +120,7 @@ export class SupabaseLocationRepository implements LocationRepository {
         name: location.name,
         description: location.description,
         campaign_id: location.campaign_id,
+        location_type: (location as any).location_type || null,
       })
       .select()
       .single()
@@ -171,6 +172,7 @@ export class SupabaseLocationRepository implements LocationRepository {
       name: data.name,
       description: data.description || null,
       campaign_id: data.campaign_id,
+      location_type: data.location_type || null,
       created_at: data.created_at,
       updated_at: data.updated_at || null,
     }

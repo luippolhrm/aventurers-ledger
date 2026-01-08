@@ -121,6 +121,7 @@ export class SupabaseShopRepository implements ShopRepository {
         description: shop.description,
         location_id: shop.location_id,
         shopkeeper_name: shop.shopkeeper_name,
+        shop_type: (shop as any).shop_type || null,
       })
       .select()
       .single()
@@ -173,6 +174,7 @@ export class SupabaseShopRepository implements ShopRepository {
       description: data.description || null,
       location_id: data.location_id,
       shopkeeper_name: data.shopkeeper_name || null,
+      shop_type: data.shop_type || null,
       created_at: data.created_at,
       updated_at: data.updated_at || null,
     }

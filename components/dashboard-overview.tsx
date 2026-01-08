@@ -1,10 +1,11 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import { useRouter } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
-import { type Language, translations } from "@/lib/translations"
+import { useLanguage } from "@/lib/language-context"
 import { useAuth } from "@/lib/auth-context"
 import { Sword, Crown, Users, ArrowRight, User } from "lucide-react"
 import { useServices } from "@/hooks/use-services"
@@ -12,7 +13,7 @@ import { LoadingState } from "@/components/molecules/loading"
 import type { CharacterWithCampaign } from "@/lib/infrastructure/repositories/character-repository"
 
 interface DashboardOverviewProps {
-  language: Language
+  language?: "es" // Mantener por compatibilidad, pero ya no se usa
   onNavigate: (module: string) => void
 }
 
@@ -31,8 +32,9 @@ type CampaignForDashboard = {
 }
 
 export function DashboardOverview({ language, onNavigate }: DashboardOverviewProps) {
-  const t = translations[language]
+  const { t } = useLanguage()
   const { user } = useAuth()
+  const router = useRouter()
   const [campaignsAsGM, setCampaignsAsGM] = useState<CampaignForDashboard[]>([])
   const [campaignsAsPlayer, setCampaignsAsPlayer] = useState<CampaignForDashboard[]>([])
   const [assignedCharacters, setAssignedCharacters] = useState<CharacterWithCampaign[]>([])
@@ -131,77 +133,62 @@ export function DashboardOverview({ language, onNavigate }: DashboardOverviewPro
             </div>
           </CardHeader>
           <CardContent className="space-y-3 md:space-y-4 p-4 md:p-6">
-          {/* Assigned Characters */}
-          {assignedCharacters.length > 0 && (
-            <div>
-              <h3 className="text-sm font-semibold mb-2 text-muted-foreground">
-                Personajes Asignados ({assignedCharacters.length})
-              </h3>
-              <div className="space-y-2">
-                {assignedCharacters.slice(0, 3).map((character) => (
-                  <div
-                    key={character.id}
-                    className="p-3 bg-muted rounded-lg border"
-                  >
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="font-medium">{character.name}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {character.race}
-                          {character.class && ` • ${character.class}`}
-                          {character.level && ` • Nivel ${character.level}`}
-                        </p>
-                        <p className="text-xs text-muted-foreground mt-1">
-                          En: {character.campaignName}
-                        </p>
-                      </div>
+          {/* All Characters - Combined List */}
+          {(assignedCharacters.length > 0 || freeCharacters.length > 0) ? (
+            <div className="space-y-2">
+              {/* Assigned Characters */}
+              {assignedCharacters.slice(0, 3).map((character) => (
+                <div
+                  key={character.id}
+                  className="p-3 bg-muted rounded-lg border hover:bg-accent transition-colors cursor-pointer"
+                  onClick={() => router.push(`/characters/${character.id}/sheet`)}
+                >
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="font-medium">{character.name}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {character.race}
+                        {character.class && ` • ${character.class}`}
+                        {character.level && ` • Nivel ${character.level}`}
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        En: {character.campaignName}
+                      </p>
                     </div>
                   </div>
-                ))}
-                {assignedCharacters.length > 3 && (
-                  <p className="text-xs text-muted-foreground text-center">
-                    +{assignedCharacters.length - 3} más
-                  </p>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* Free Characters */}
-          {freeCharacters.length > 0 && (
-            <div>
-              <h3 className="text-sm font-semibold mb-2">
-                Personajes Libres ({freeCharacters.length})
-              </h3>
-              <div className="space-y-2">
-                {freeCharacters.slice(0, 3).map((character) => (
-                  <div
-                    key={character.id}
-                    className="p-3 bg-green-50 dark:bg-green-950 rounded-lg border border-green-200 dark:border-green-800"
-                  >
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="font-medium">{character.name}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {character.race}
-                          {character.class && ` • ${character.class}`}
-                          {character.level && ` • Nivel ${character.level}`}
-                        </p>
-                      </div>
-                      <span className="text-xs font-medium bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-100 px-2 py-1 rounded">
-                        Disponible
-                      </span>
+                </div>
+              ))}
+              
+              {/* Free Characters */}
+              {freeCharacters.slice(0, 3).map((character) => (
+                <div
+                  key={character.id}
+                  className="p-3 bg-green-50 dark:bg-green-950 rounded-lg border border-green-200 dark:border-green-800 hover:border-green-400 dark:hover:border-green-600 transition-colors cursor-pointer"
+                  onClick={() => router.push(`/characters/${character.id}/sheet`)}
+                >
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="font-medium">{character.name}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {character.race}
+                        {character.class && ` • ${character.class}`}
+                        {character.level && ` • Nivel ${character.level}`}
+                      </p>
                     </div>
+                    <span className="text-xs font-medium bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-100 px-2 py-1 rounded">
+                      Disponible
+                    </span>
                   </div>
-                ))}
-                {freeCharacters.length > 3 && (
-                  <p className="text-xs text-muted-foreground text-center">
-                    +{freeCharacters.length - 3} más
-                  </p>
-                )}
-              </div>
+                </div>
+              ))}
+              
+              {((assignedCharacters.length > 3 ? assignedCharacters.length - 3 : 0) + (freeCharacters.length > 3 ? freeCharacters.length - 3 : 0)) > 0 && (
+                <p className="text-xs text-muted-foreground text-center">
+                  +{((assignedCharacters.length > 3 ? assignedCharacters.length - 3 : 0) + (freeCharacters.length > 3 ? freeCharacters.length - 3 : 0))} más
+                </p>
+              )}
             </div>
-          )}
+          ) : null}
 
           {assignedCharacters.length === 0 && freeCharacters.length === 0 && (
             <Alert>

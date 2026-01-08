@@ -2,26 +2,25 @@
 
 import { useEffect, useState } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { type Language, translations } from "@/lib/translations"
+import { useLanguage } from "@/lib/language-context"
 import { ArrowRight, Coins, AlertCircle } from "lucide-react"
 import { useServices } from "@/hooks/use-services"
 import { LoadingState } from "@/components/molecules/loading"
 import { EmptyState } from "@/components/molecules/empty"
+import { ConversionForm } from "@/components/molecules/movement/conversion-form"
+import { CurrencyAmount } from "@/components/atoms/currency"
+import { WalletDisplay } from "@/components/molecules/wallet/wallet-display"
 import type { WalletData } from "@/lib/infrastructure/repositories"
 import type { Movement } from "@/lib/infrastructure/repositories"
 
 interface MovementsProps {
-  language: Language
+  language?: "es" // Mantener por compatibilidad, pero ya no se usa
   characterId: string
 }
 
 export function Movements({ language, characterId }: MovementsProps) {
-  const t = translations[language]
+  const { t } = useLanguage()
   const [wallet, setWallet] = useState<WalletData | null>(null)
   const [movements, setMovements] = useState<Movement[]>([])
   const [fromCurrency, setFromCurrency] = useState<"PP" | "GP" | "EP" | "SP" | "CP" | "">("")
@@ -174,27 +173,19 @@ export function Movements({ language, characterId }: MovementsProps) {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="space-y-2 md:space-y-3">
-              {currencies.map((currency) => {
-                const currencyMap: Record<string, keyof WalletData> = {
-                  PP: "platinum",
-                  GP: "gold",
-                  EP: "electrum",
-                  SP: "silver",
-                  CP: "copper",
-                }
-                const walletKey = currencyMap[currency.id]
-                const balance = wallet?.[walletKey] ?? 0
-                return (
-                  <div key={currency.id} className="flex justify-between items-center p-2 md:p-3 bg-muted rounded-lg">
-                    <span className="font-medium text-sm md:text-base">
-                      {currency.name} ({currency.id})
-                    </span>
-                    <span className="text-base md:text-lg font-bold">{balance}</span>
-                  </div>
-                )
-              })}
-            </div>
+            {wallet ? (
+              <WalletDisplay
+                platinum={wallet.platinum}
+                gold={wallet.gold}
+                electrum={wallet.electrum}
+                silver={wallet.silver}
+                copper={wallet.copper}
+                totalWealth={wallet.total_wealth}
+                variant="detailed"
+              />
+            ) : (
+              <EmptyState icon={Coins} title="Sin wallet" description="No se pudo cargar el wallet" />
+            )}
           </CardContent>
         </Card>
 
@@ -203,87 +194,22 @@ export function Movements({ language, characterId }: MovementsProps) {
           <CardHeader className="pb-3">
             <CardTitle className="text-base md:text-lg">{t.movements.conversionForm}</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="from-currency">{t.movements.fromCurrency}</Label>
-              <Select
-                value={fromCurrency}
-                onValueChange={(value) => setFromCurrency(value as "PP" | "GP" | "EP" | "SP" | "CP" | "")}
-              >
-                <SelectTrigger id="from-currency">
-                  <SelectValue placeholder={t.movements.selectCurrency} />
-                </SelectTrigger>
-                <SelectContent>
-                  {currencies.map((currency) => (
-                    <SelectItem key={currency.id} value={currency.id}>
-                      {currency.name} ({currency.id})
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="amount">{t.movements.amount}</Label>
-              <Input
-                id="amount"
-                type="number"
-                value={amount}
-                onChange={(e) => {
-                  setAmount(e.target.value)
-                  setMessage(null)
-                }}
-                placeholder={t.movements.enterAmount}
-                min="0"
-                step="0.01"
-              />
-            </div>
-
-            <div className="flex justify-center">
-              <ArrowRight className="w-6 h-6 text-muted-foreground" />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="to-currency">{t.movements.toCurrency}</Label>
-              <Select
-                value={toCurrency}
-                onValueChange={(value) => setToCurrency(value as "PP" | "GP" | "EP" | "SP" | "CP" | "")}
-              >
-                <SelectTrigger id="to-currency">
-                  <SelectValue placeholder={t.movements.selectCurrency} />
-                </SelectTrigger>
-                <SelectContent>
-                  {currencies.map((currency) => (
-                    <SelectItem key={currency.id} value={currency.id}>
-                      {currency.name} ({currency.id})
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {amount && fromCurrency && toCurrency && (
-              <Alert>
-                <AlertDescription>
-                  <strong>{t.movements.youWillReceive}:</strong>{" "}
-                  {(() => {
-                    const converted = calculateConversion()
-                    return Number.isInteger(converted) ? converted : converted.toFixed(2)
-                  })()}{" "}
-                  {currencies.find((c) => c.id === toCurrency)?.name}
-                </AlertDescription>
-              </Alert>
-            )}
-
-            {message && (
-              <Alert variant={message.type === "error" ? "destructive" : "default"}>
-                <AlertDescription className="text-sm md:text-base">{message.text}</AlertDescription>
-              </Alert>
-            )}
-
-            <Button onClick={handleConversion} className="w-full" size="lg">
-              {t.movements.convert}
-            </Button>
+          <CardContent>
+            <ConversionForm
+              language={language}
+              fromCurrency={fromCurrency}
+              toCurrency={toCurrency}
+              amount={amount}
+              convertedAmount={calculateConversion()}
+              message={message}
+              onFromCurrencyChange={setFromCurrency}
+              onToCurrencyChange={setToCurrency}
+              onAmountChange={(value) => {
+                setAmount(value)
+                setMessage(null)
+              }}
+              onConvert={handleConversion}
+            />
           </CardContent>
         </Card>
       </div>

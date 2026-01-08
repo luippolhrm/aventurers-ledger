@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { ShoppingCart, ShoppingBag } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
-import { type Language, translations } from "@/lib/translations"
+import { useLanguage } from "@/lib/language-context"
 import { useShoppingCart } from "@/hooks/use-shopping-cart"
 import { useToast } from "@/hooks/use-toast"
 import { formatPriceInGold } from "@/lib/utils"
@@ -34,14 +34,14 @@ interface ShopItem {
 }
 
 interface ShopCatalogProps {
-  language: Language
+  language?: "es" // Mantener por compatibilidad, pero ya no se usa
   shopId: string
   characterId: string
   isGm: boolean
 }
 
 export function ShopCatalog({ language, shopId, characterId, isGm }: ShopCatalogProps) {
-  const t = translations[language]
+  const { t } = useLanguage()
   const services = useServices()
   const { user } = useAuth()
   const { addItem, itemCount } = useShoppingCart(shopId)

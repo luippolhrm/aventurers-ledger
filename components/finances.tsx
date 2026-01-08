@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Textarea } from "@/components/ui/textarea"
-import { type Language, translations } from "@/lib/translations"
+import { useLanguage } from "@/lib/language-context"
 import { Coins, Plus, Minus, ArrowRight, Send, TrendingUp, AlertCircle } from "lucide-react"
 import { useServices } from "@/hooks/use-services"
 import { LoadingState } from "@/components/molecules/loading"
@@ -20,12 +20,12 @@ import type { TransferWithDetails } from "@/lib/infrastructure/repositories"
 import type { Character } from "@/lib/infrastructure/repositories"
 
 interface FinancesProps {
-  language: Language
+  language?: "es" // Mantener por compatibilidad, pero ya no se usa
   characterId: string
 }
 
 export function Finances({ language, characterId }: FinancesProps) {
-  const t = translations[language]
+  const { t } = useLanguage()
 
   const [wallet, setWallet] = useState<WalletData | null>(null)
   const [movements, setMovements] = useState<MovementWithDetails[]>([])

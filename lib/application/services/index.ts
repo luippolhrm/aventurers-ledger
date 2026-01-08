@@ -15,7 +15,19 @@ export { ShopService } from "./shop-service"
 export { LocationService } from "./location-service"
 export { ShopItemService } from "./shop-item-service"
 export { NpcService } from "./npc-service"
+export { FeatService } from "./feat-service"
 export type { CurrencyType, Currency } from "./currency-converter-service"
 export type { SignUpData, SignInData } from "./auth-service"
 export type { ShoppingCart, CartWithItems, CheckoutResult, ShoppingCartItem, ShoppingCartItemWithShopItem } from "./shopping-cart-service"
+export type {
+  OriginFeat,
+  GeneralFeat,
+  CombatStyleFeat,
+  EpicBoon,
+  Feat,
+  FeatType,
+  FeatPrerequisites,
+  FeatBenefits,
+  AbilityScores as FeatAbilityScores,
+} from "./feat-service"
 

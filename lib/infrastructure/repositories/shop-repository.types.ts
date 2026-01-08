@@ -8,6 +8,7 @@ export interface Shop {
   description: string | null
   location_id: string
   shopkeeper_name: string | null
+  shop_type: string | null
   created_at: string
   updated_at: string | null
 }

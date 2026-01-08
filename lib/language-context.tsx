@@ -1,39 +1,17 @@
 "use client"
 
 import type React from "react"
-import { createContext, useContext, useState, useEffect } from "react"
-import { type Language, translations } from "@/lib/translations"
-
-function getBrowserLanguage(): Language {
-  if (typeof window === "undefined") return "en"
-
-  const browserLang = navigator.language.toLowerCase()
-
-  if (browserLang.startsWith("es")) return "es"
-  if (browserLang.startsWith("fr")) return "fr"
-  if (browserLang.startsWith("pt")) return "pt"
-
-  return "en"
-}
+import { createContext, useContext } from "react"
+import { texts } from "@/lib/texts"
 
 interface LanguageContextType {
-  language: Language
-  setLanguage: (lang: Language) => void
-  t: (typeof translations)[Language]
+  t: typeof texts
 }
 
 const LanguageContext = createContext<LanguageContextType | undefined>(undefined)
 
 export function LanguageProvider({ children }: { children: React.ReactNode }) {
-  const [language, setLanguage] = useState<Language>("en")
-
-  useEffect(() => {
-    setLanguage(getBrowserLanguage())
-  }, [])
-
-  const t = translations[language]
-
-  return <LanguageContext.Provider value={{ language, setLanguage, t }}>{children}</LanguageContext.Provider>
+  return <LanguageContext.Provider value={{ t: texts }}>{children}</LanguageContext.Provider>
 }
 
 export function useLanguage() {

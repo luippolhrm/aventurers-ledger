@@ -9,7 +9,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Store, Plus, Trash2 } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
-import { type Language, translations } from "@/lib/translations"
+import { useLanguage } from "@/lib/language-context"
 import { useServices } from "@/hooks/use-services"
 import { ErrorService } from "@/lib/infrastructure/errors"
 
@@ -23,13 +23,13 @@ interface Shop {
 }
 
 interface ShopsProps {
-  language: Language
+  language?: "es" // Mantener por compatibilidad, pero ya no se usa
   locationId: string
   onSelectShop?: (shopId: string) => void
 }
 
 export function Shops({ language, locationId, onSelectShop }: ShopsProps) {
-  const t = translations[language]
+  const { t } = useLanguage()
   const services = useServices()
   const { user } = useAuth()
 

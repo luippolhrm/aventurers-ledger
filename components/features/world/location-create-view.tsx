@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Alert, AlertDescription } from "@/components/ui/alert"
@@ -20,6 +20,7 @@ interface LocationCreateViewProps {
 export function LocationCreateView({ campaignId }: LocationCreateViewProps) {
   const { t } = useLanguage()
   const router = useRouter()
+  const searchParams = useSearchParams()
   const { user } = useAuth()
   const services = useServices()
 
@@ -27,12 +28,20 @@ export function LocationCreateView({ campaignId }: LocationCreateViewProps) {
   const [isSaving, setIsSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [isOwner, setIsOwner] = useState(false)
+  const [defaultLocationType, setDefaultLocationType] = useState<string | null>(null)
 
   useEffect(() => {
     if (user && campaignId) {
       loadCampaignData()
     }
   }, [user, campaignId])
+
+  useEffect(() => {
+    const typeParam = searchParams?.get("type")
+    if (typeParam && ["village", "forest", "camp", "port", "ruins", "city", "dungeon"].includes(typeParam)) {
+      setDefaultLocationType(typeParam)
+    }
+  }, [searchParams])
 
   const loadCampaignData = async () => {
     if (!user || !campaignId) return
@@ -126,7 +135,12 @@ export function LocationCreateView({ campaignId }: LocationCreateViewProps) {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <LocationForm onSubmit={handleSubmit} onCancel={handleCancel} isLoading={isSaving} />
+          <LocationForm
+            defaultLocationType={defaultLocationType}
+            onSubmit={handleSubmit}
+            onCancel={handleCancel}
+            isLoading={isSaving}
+          />
         </CardContent>
       </Card>
     </div>

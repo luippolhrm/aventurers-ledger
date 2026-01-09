@@ -1,101 +1,167 @@
 "use client"
 
 import { cn } from "@/lib/utils"
-import { Coins, Menu, X, Users, Home, DollarSign, Package, Map, Settings, User, Store } from "lucide-react"
+import { Coins, Menu, X, Users, Home, Map, Settings, User, LogOut } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useState } from "react"
 import { useLanguage } from "@/lib/language-context"
+import { useRouter, usePathname } from "next/navigation"
+import { useServices } from "@/hooks/use-services"
 
 interface SidebarProps {
-  activeModule: string
-  onModuleChange: (module: string) => void
-  language?: "es" // Mantener por compatibilidad, pero ya no se usa
   includeProfileSettings?: boolean
 }
 
-export function Sidebar({ activeModule, onModuleChange, language, includeProfileSettings = false }: SidebarProps) {
+interface MenuItem {
+  id: string
+  name: string
+  icon: any
+  path?: string
+  onClick?: () => void
+  isDestructive?: boolean
+}
+
+export function Sidebar({ includeProfileSettings = false }: SidebarProps) {
   const [isMobileOpen, setIsMobileOpen] = useState(false)
   const { t } = useLanguage()
+  const router = useRouter()
+  const pathname = usePathname()
+  const services = useServices()
 
-  const mainModules = [
+  // Determinar módulo activo internamente
+  const getActiveModule = () => {
+    if (pathname?.includes("/characters")) return "characters"
+    if (pathname?.includes("/campaigns")) return "campaigns"
+    if (pathname?.includes("/currency")) return "currency-converter"
+    if (pathname?.includes("/profile")) return "profile"
+    if (pathname?.includes("/settings")) return "settings"
+    return "welcome"
+  }
+
+  const activeModule = getActiveModule()
+
+  const mainModules: MenuItem[] = [
     {
       id: "welcome",
-      name: t.sidebar.welcome,
+      name: "Inicio",
       icon: Home,
+      path: "/dashboard",
     },
     {
       id: "characters",
-      name: t.sidebar.characters,
+      name: "Aventureros",
       icon: Users,
+      path: "/characters",
     },
     {
       id: "campaigns",
-      name: t.sidebar.campaigns,
+      name: "Campañas",
       icon: Map,
+      path: "/campaigns",
     },
     {
       id: "currency-converter",
-      name: t.sidebar.currencyConverter,
+      name: "Conversor de Monedas",
       icon: Coins,
+      path: "/currency-converter",
     },
   ]
 
-  const allModules = includeProfileSettings
-    ? [
-        ...mainModules,
-        {
-          id: "profile",
-          name: t.userMenu.profile,
-          icon: User,
-        },
-        {
-          id: "settings",
-          name: t.userMenu.settings,
-          icon: Settings,
-        },
-      ]
-    : mainModules
+  const handleLogout = async () => {
+    try {
+      await services.auth.signOut()
+      router.push("/auth/login")
+    } catch (error) {
+      console.error("Error signing out:", error)
+      // Redirect anyway
+      router.push("/auth/login")
+    }
+    setIsMobileOpen(false)
+  }
+
+  const userSettingsModules: MenuItem[] = [
+    {
+      id: "profile",
+      name: t.userMenu.profile,
+      icon: User,
+      path: "/profile",
+    },
+    {
+      id: "settings",
+      name: t.userMenu.settings,
+      icon: Settings,
+      path: "/settings",
+    },
+    {
+      id: "logout",
+      name: t.userMenu.logout,
+      icon: LogOut,
+      onClick: handleLogout,
+      isDestructive: true,
+    },
+  ]
+
+  const handleNavigation = (path: string) => {
+    if (path.startsWith("/")) {
+      router.push(path)
+    }
+    setIsMobileOpen(false)
+  }
+
+  const isPathActive = (path: string) => {
+    if (path === "/dashboard") {
+      return pathname === "/dashboard"
+    }
+    return pathname?.startsWith(path)
+  }
+
+  const renderMenuItem = (module: MenuItem) => {
+    const Icon = module.icon
+    const isActive = module.path ? (module.id === activeModule || isPathActive(module.path)) : false
+
+    const handleClick = () => {
+      if (module.onClick) {
+        module.onClick()
+      } else if (module.path) {
+        handleNavigation(module.path)
+      }
+    }
+
+    return (
+      <li key={module.id}>
+        <button
+          onClick={handleClick}
+          className={cn(
+            "w-full flex items-center gap-3 px-4 py-2.5 rounded-lg transition-colors text-left",
+            module.isDestructive
+              ? "text-destructive hover:bg-destructive/10 hover:text-destructive"
+              : isActive
+              ? "bg-primary text-primary-foreground"
+              : "hover:bg-accent hover:text-accent-foreground"
+          )}
+        >
+          <Icon className="w-5 h-5 shrink-0" />
+          <span className="font-medium">{module.name}</span>
+        </button>
+      </li>
+    )
+  }
 
   const SidebarContent = () => (
     <div className="flex flex-col h-full">
-      <div className="p-6 border-b border-border">
-        <h2 className="text-xl font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
-          {t.sidebar.title}
-        </h2>
-      </div>
-
-      <nav className="flex-1 p-4">
-        <ul className="space-y-2">
-          {allModules.map((module) => {
-            const Icon = module.icon
-            return (
-              <li key={module.id}>
-                <button
-                  onClick={() => {
-                    onModuleChange(module.id)
-                    setIsMobileOpen(false)
-                  }}
-                  className={cn(
-                    "w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors text-left",
-                    activeModule === module.id
-                      ? "bg-primary text-primary-foreground"
-                      : "hover:bg-accent hover:text-accent-foreground",
-                  )}
-                >
-                  <Icon className="w-5 h-5" />
-                  <span className="font-medium">{module.name}</span>
-                </button>
-              </li>
-            )
-          })}
+      {/* Módulos principales */}
+      <nav className="flex-1 p-4 overflow-y-auto">
+        <ul className="space-y-1">
+          {mainModules.map(renderMenuItem)}
         </ul>
-
-        {!includeProfileSettings && (
-          <div className="mt-8 p-4 bg-muted rounded-lg">
-            <p className="text-sm text-muted-foreground text-center">{t.sidebar.comingSoon}</p>
-          </div>
-        )}
       </nav>
+
+      {/* Sección de usuario en la parte inferior */}
+      <div className="border-t border-border p-4">
+        <ul className="space-y-1">
+          {userSettingsModules.map(renderMenuItem)}
+        </ul>
+      </div>
     </div>
   )
 
@@ -120,14 +186,14 @@ export function Sidebar({ activeModule, onModuleChange, language, includeProfile
       <aside
         className={cn(
           "fixed top-0 left-0 h-full w-64 bg-background border-r border-border z-40 transition-transform md:hidden",
-          isMobileOpen ? "translate-x-0" : "-translate-x-full",
+          isMobileOpen ? "translate-x-0" : "-translate-x-full"
         )}
       >
         <SidebarContent />
       </aside>
 
-      {/* Desktop sidebar */}
-      <aside className="hidden md:block w-64 bg-background border-r border-border">
+      {/* Desktop sidebar - Fijo */}
+      <aside className="hidden md:block fixed top-0 left-0 h-screen w-64 bg-background border-r border-border z-30">
         <SidebarContent />
       </aside>
     </>

@@ -3,18 +3,15 @@
 import { useState, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { WalletDisplay } from "@/components/molecules/wallet"
-import { CharacterCard } from "@/components/molecules/character"
 import { StatCard } from "@/components/molecules/item"
 import { CampaignCard } from "@/components/molecules/campaign"
 import { LoadingState } from "@/components/molecules/loading"
 import { EmptyState } from "@/components/molecules/empty"
 import { useServices } from "@/hooks/use-services"
-import { useActiveCharacter } from "@/lib/active-character-context"
 import { useAuth } from "@/lib/auth-context"
-import { Sword, Coins, Users, Map, ArrowRight } from "lucide-react"
+import { Sword, Users, Map, ArrowRight } from "lucide-react"
 import { useLanguage } from "@/lib/language-context"
-import type { WalletData } from "@/lib/infrastructure/repositories"
+import { useRouter } from "next/navigation"
 import type { Campaign } from "@/lib/infrastructure/repositories"
 
 // Tipo extendido para UI del dashboard
@@ -35,8 +32,7 @@ interface DashboardViewProps {
 export function DashboardView({ language, onNavigate }: DashboardViewProps) {
   const { t } = useLanguage()
   const { user } = useAuth()
-  const { activeCharacter } = useActiveCharacter()
-  const [wallet, setWallet] = useState<WalletData | null>(null)
+  const router = useRouter()
   const [campaignsAsGM, setCampaignsAsGM] = useState<CampaignForDashboard[]>([])
   const [campaignsAsPlayer, setCampaignsAsPlayer] = useState<CampaignForDashboard[]>([])
   const [loading, setLoading] = useState(true)
@@ -48,24 +44,13 @@ export function DashboardView({ language, onNavigate }: DashboardViewProps) {
     } else {
       setLoading(false)
     }
-  }, [user, activeCharacter])
+  }, [user])
 
   const loadData = async () => {
     if (!user) return
 
     setLoading(true)
     try {
-      // Load wallet using service
-      if (activeCharacter) {
-        try {
-          const walletData = await services.wallet.getWallet(activeCharacter.id)
-          setWallet(walletData)
-        } catch (error) {
-          console.error("Error loading wallet:", error)
-          setWallet(null)
-        }
-      }
-
       // Load campaigns using service
       const userCampaigns = await services.campaign.getUserCampaigns(user.id)
 
@@ -106,9 +91,9 @@ export function DashboardView({ language, onNavigate }: DashboardViewProps) {
         <p className="text-muted-foreground">{t.welcome.quickStats}</p>
       </div>
 
-      {/* Active Character Section */}
-      {activeCharacter && (
-        <Card className="border-2">
+      {/* Quick Actions */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <Card className="cursor-pointer hover:bg-accent/50 transition-colors" onClick={() => router.push("/characters")}>
           <CardHeader>
             <div className="flex items-center gap-3">
               <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center">
@@ -116,55 +101,29 @@ export function DashboardView({ language, onNavigate }: DashboardViewProps) {
               </div>
               <div>
                 <CardTitle>{t.sidebar.character}</CardTitle>
-                <CardDescription>{activeCharacter.name}</CardDescription>
+                <CardDescription>Gestiona tus aventureros</CardDescription>
               </div>
             </div>
           </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              {/* Character Card */}
-              <CharacterCard
-                id={activeCharacter.id}
-                name={activeCharacter.name}
-                race={activeCharacter.race || "Unknown"}
-                characterClass={activeCharacter.class}
-                level={activeCharacter.level}
-                gender={activeCharacter.gender}
-                platinum={wallet?.platinum}
-                gold={wallet?.gold}
-                electrum={wallet?.electrum}
-                silver={wallet?.silver}
-                copper={wallet?.copper}
-              />
-
-              {/* Wallet Display */}
-              {wallet && (
-                <WalletDisplay
-                  platinum={wallet.platinum}
-                  gold={wallet.gold}
-                  electrum={wallet.electrum}
-                  silver={wallet.silver}
-                  copper={wallet.copper}
-                  totalWealth={wallet.total_wealth}
-                  variant="detailed"
-                />
-              )}
-            </div>
-
-            <Button
-              variant="outline"
-              className="w-full mt-4 gap-2"
-              onClick={() => onNavigate("characters")}
-            >
-              {t.character.manageAdventurers || "Manage Characters"}
-              <ArrowRight className="w-4 h-4" />
-            </Button>
-          </CardContent>
         </Card>
-      )}
+
+        <Card className="cursor-pointer hover:bg-accent/50 transition-colors" onClick={() => router.push("/campaigns")}>
+          <CardHeader>
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center">
+                <Map className="w-6 h-6 text-primary" />
+              </div>
+              <div>
+                <CardTitle>Campañas</CardTitle>
+                <CardDescription>Gestiona tus campañas</CardDescription>
+              </div>
+            </div>
+          </CardHeader>
+        </Card>
+      </div>
 
       {/* Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <StatCard
           title="Campañas como GM"
           value={campaignsAsGM.length}
@@ -176,12 +135,6 @@ export function DashboardView({ language, onNavigate }: DashboardViewProps) {
           value={campaignsAsPlayer.length}
           icon={Users}
           description="Campañas en las que participas"
-        />
-        <StatCard
-          title="Total Wealth"
-          value={wallet?.total_wealth.toFixed(2) || "0.00"}
-          icon={Coins}
-          description="En Gold Pieces"
         />
       </div>
 
@@ -236,18 +189,6 @@ export function DashboardView({ language, onNavigate }: DashboardViewProps) {
       )}
 
       {/* Empty States */}
-      {!activeCharacter && (
-        <EmptyState
-          icon={Sword}
-          title="No hay personaje activo"
-          description="Selecciona o crea un personaje para comenzar"
-          action={{
-            label: "Gestionar Personajes",
-            onClick: () => onNavigate("characters"),
-          }}
-        />
-      )}
-
       {campaignsAsGM.length === 0 && campaignsAsPlayer.length === 0 && (
         <EmptyState
           icon={Map}

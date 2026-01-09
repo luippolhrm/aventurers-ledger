@@ -12,23 +12,20 @@ import { useLanguage } from "@/lib/language-context"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { formatPriceInGold } from "@/lib/utils"
 import { useToast } from "@/hooks/use-toast"
-import { useActiveCharacter } from "@/lib/active-character-context"
 import { useServices } from "@/hooks/use-services"
 
 interface ShoppingCartProps {
   shopId: string
   characterId: string
   isGm: boolean
-  language?: "es" // Mantener por compatibilidad, pero ya no se usa
 }
 
-export function ShoppingCartComponent({ shopId, characterId, isGm, language }: ShoppingCartProps) {
+export function ShoppingCartComponent({ shopId, characterId, isGm }: ShoppingCartProps) {
   const { t } = useLanguage()
   const router = useRouter()
   const { toast } = useToast()
   const services = useServices()
-  const { activeCharacterId } = useActiveCharacter() // ✅ Agregar esta línea
-  const { cart, loading, error, itemCount, totalPrice, updateItem, removeItem, checkout, canCheckout } = useShoppingCart(shopId)
+  const { cart, loading, error, itemCount, totalPrice, updateItem, removeItem, checkout, canCheckout } = useShoppingCart(shopId, characterId)
   type DialogType = 'checkout' | 'success' | null
   const [activeDialog, setActiveDialog] = useState<DialogType>(null)
   const [isProcessingCheckout, setIsProcessingCheckout] = useState(false)
@@ -309,7 +306,6 @@ export function ShoppingCartComponent({ shopId, characterId, isGm, language }: S
                 item={item}
                 onUpdateQuantity={updateItem}
                 onRemove={removeItem}
-                language={language}
               />
             ))}
           </div>

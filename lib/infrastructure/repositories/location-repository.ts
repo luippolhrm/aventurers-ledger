@@ -173,6 +173,7 @@ export class SupabaseLocationRepository implements LocationRepository {
       description: data.description || null,
       campaign_id: data.campaign_id,
       location_type: data.location_type || null,
+      is_active: data.is_active !== undefined ? data.is_active : true,
       created_at: data.created_at,
       updated_at: data.updated_at || null,
     }

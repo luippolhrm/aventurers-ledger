@@ -11,7 +11,8 @@ import { useAuth } from "@/lib/auth-context"
 import { useServices } from "@/hooks/use-services"
 import { useLanguage } from "@/lib/language-context"
 import { ShopForm } from "./shop-form"
-import { ArrowLeft, Store } from "lucide-react"
+import { ArrowLeft, Store, MapPin, AlertCircle } from "lucide-react"
+import type { Location } from "@/lib/infrastructure/repositories/location-repository"
 import type { Npc } from "@/lib/infrastructure/repositories/npc-repository"
 
 interface ShopCreateViewProps {
@@ -25,11 +26,11 @@ export function ShopCreateView({ campaignId, locationId }: ShopCreateViewProps) 
   const { user } = useAuth()
   const services = useServices()
 
+  const [location, setLocation] = useState<Location | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [isOwner, setIsOwner] = useState(false)
-  const [location, setLocation] = useState<any>(null)
   const [standaloneNpcs, setStandaloneNpcs] = useState<Npc[]>([])
 
   useEffect(() => {
@@ -66,7 +67,6 @@ export function ShopCreateView({ campaignId, locationId }: ShopCreateViewProps) 
     name: string
     description: string
     shop_type: string
-    shopkeeper_name: string
     selectedNpcId: string
   }) => {
     if (!user) {
@@ -81,7 +81,7 @@ export function ShopCreateView({ campaignId, locationId }: ShopCreateViewProps) 
         {
           name: formData.name.trim(),
           description: formData.description || null,
-          shopkeeper_name: formData.shopkeeper_name || null,
+          shopkeeper_name: null,
           shop_type: formData.shop_type,
           location_id: locationId,
         },
@@ -92,10 +92,19 @@ export function ShopCreateView({ campaignId, locationId }: ShopCreateViewProps) 
       if (formData.selectedNpcId && formData.selectedNpcId !== "none") {
         const { createBrowserClient } = await import("@/lib/supabase/client")
         const supabase = createBrowserClient()
-        await supabase.from("shop_npcs").insert({
-          shop_id: newShop.id,
-          npc_id: formData.selectedNpcId,
-        })
+        
+        // Buscar el NPC en el array standaloneNpcs que ya tenemos cargado
+        const selectedNpc = standaloneNpcs.find((npc) => npc.id === formData.selectedNpcId)
+        
+        if (selectedNpc) {
+          await supabase.from("shop_npcs").insert({
+            shop_id: newShop.id,
+            npc_id: formData.selectedNpcId,
+            name: selectedNpc.name, // Campo requerido por la tabla shop_npcs
+          })
+        } else {
+          throw new Error("No se pudo encontrar el NPC seleccionado")
+        }
       }
 
       router.push(`/campaigns/${campaignId}/locations/${locationId}/shops/${newShop.id}`)
@@ -111,8 +120,17 @@ export function ShopCreateView({ campaignId, locationId }: ShopCreateViewProps) 
     router.push(`/campaigns/${campaignId}/locations/${locationId}`)
   }
 
-  const handleCreateNpc = () => {
-    router.push(`/campaigns/${campaignId}/npcs/new?returnTo=shop&locationId=${locationId}`)
+  const getLocationTypeLabel = (type: string) => {
+    const locationTypes = t.marketplace?.locationTypes
+    if (!locationTypes) return type
+    return (locationTypes as Record<string, string>)[type] || type
+  }
+
+  const getLocationTypeBadgeColor = (locationType: string | null): string => {
+    if (locationType === "dungeon") {
+      return "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200"
+    }
+    return "bg-primary/10 text-primary"
   }
 
   if (isLoading) {
@@ -126,7 +144,7 @@ export function ShopCreateView({ campaignId, locationId }: ShopCreateViewProps) 
           <ArrowLeft className="w-4 h-4 mr-2" />
           Volver a Ubicación
         </Button>
-        <EmptyState title="Acceso Denegado" description="Solo el dueño de la campaña puede crear tiendas" />
+        <EmptyState icon={AlertCircle} title="Acceso Denegado" description="Solo el dueño de la campaña puede crear tiendas" />
       </div>
     )
   }
@@ -138,7 +156,7 @@ export function ShopCreateView({ campaignId, locationId }: ShopCreateViewProps) 
           <ArrowLeft className="w-4 h-4 mr-2" />
           Volver a Ubicación
         </Button>
-        <EmptyState title="Ubicación no encontrada" description="La ubicación solicitada no existe" />
+        <EmptyState icon={MapPin} title="Ubicación no encontrada" description="La ubicación solicitada no existe" />
       </div>
     )
   }
@@ -168,11 +186,13 @@ export function ShopCreateView({ campaignId, locationId }: ShopCreateViewProps) 
         </CardHeader>
         <CardContent>
           <ShopForm
+            locationInfo={location ? { name: location.name, type: location.location_type } : undefined}
             standaloneNpcs={standaloneNpcs}
             onSubmit={handleSubmit}
             onCancel={handleCancel}
-            onCreateNpc={handleCreateNpc}
             isLoading={isSaving}
+            getLocationTypeLabel={getLocationTypeLabel}
+            getLocationTypeBadgeColor={getLocationTypeBadgeColor}
           />
         </CardContent>
       </Card>

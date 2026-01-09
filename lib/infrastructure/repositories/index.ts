@@ -78,4 +78,26 @@ export type {
 export { SupabaseLocationRepository } from "./location-repository"
 export type { ShopItemRepository, ShopItem, CreateShopItem, UpdateShopItem } from "./shop-item-repository"
 export { SupabaseShopItemRepository } from "./shop-item-repository"
+export type { NpcRepository, Npc, CreateNpc, UpdateNpc } from "./npc-repository"
+export { SupabaseNpcRepository } from "./npc-repository"
+export type {
+  DungeonRepository,
+  DungeonRoomRepository,
+  Dungeon,
+  DungeonRoom,
+  DungeonWithRooms,
+  DungeonRoomWithNpcs,
+  CreateDungeon,
+  UpdateDungeon,
+  CreateDungeonRoom,
+  UpdateDungeonRoom,
+} from "./dungeon-repository"
+export { SupabaseDungeonRepository, SupabaseDungeonRoomRepository } from "./dungeon-repository"
+export type {
+  NpcInventoryRepository,
+  NpcInventoryItem,
+  CreateNpcInventoryItem,
+  UpdateNpcInventoryItem,
+} from "./npc-inventory-repository"
+export { SupabaseNpcInventoryRepository } from "./npc-inventory-repository"
 

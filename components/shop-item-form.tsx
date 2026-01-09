@@ -11,7 +11,6 @@ import type { ShopItemExtended } from "@/lib/types/shop-item"
 import { ItemFormConfigService, type ItemCategory } from "@/lib/services/item-form-config"
 
 interface ShopItemFormProps {
-  language?: "es" // Mantener por compatibilidad, pero ya no se usa
   initialData?: Partial<ShopItemExtended>
   onSubmit: (data: Partial<ShopItemExtended>) => void
   onCancel: () => void
@@ -49,7 +48,7 @@ const PROPERTY_OPTIONS = [
   "special",
 ] as const
 
-export function ShopItemForm({ language, initialData, onSubmit, onCancel, isLoading }: ShopItemFormProps) {
+export function ShopItemForm({ initialData, onSubmit, onCancel, isLoading }: ShopItemFormProps) {
   const { t } = useLanguage()
 
   const [formData, setFormData] = useState<Partial<ShopItemExtended>>({

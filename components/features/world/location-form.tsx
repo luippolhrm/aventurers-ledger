@@ -5,10 +5,12 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Alert, AlertDescription } from "@/components/ui/alert"
 import { useLanguage } from "@/lib/language-context"
+import { Info } from "lucide-react"
 import type { Location } from "@/lib/infrastructure/repositories/location-repository"
 
-const LOCATION_TYPE_OPTIONS = ["village", "forest", "camp", "port", "ruins", "city"] as const
+const LOCATION_TYPE_OPTIONS = ["village", "forest", "camp", "port", "ruins", "city", "dungeon"] as const
 type LocationType = (typeof LOCATION_TYPE_OPTIONS)[number]
 
 interface LocationFormData {
@@ -19,17 +21,24 @@ interface LocationFormData {
 
 interface LocationFormProps {
   initialData?: Location
+  defaultLocationType?: string | null
   onSubmit: (data: LocationFormData) => Promise<void>
   onCancel: () => void
   isLoading?: boolean
 }
 
-export function LocationForm({ initialData, onSubmit, onCancel, isLoading = false }: LocationFormProps) {
+export function LocationForm({
+  initialData,
+  defaultLocationType,
+  onSubmit,
+  onCancel,
+  isLoading = false,
+}: LocationFormProps) {
   const { t } = useLanguage()
   const [formData, setFormData] = useState<LocationFormData>({
     name: initialData?.name || "",
     description: initialData?.description || "",
-    location_type: (initialData?.location_type as LocationType) || "village",
+    location_type: (initialData?.location_type as LocationType) || (defaultLocationType as LocationType) || "village",
   })
 
   useEffect(() => {
@@ -39,8 +48,13 @@ export function LocationForm({ initialData, onSubmit, onCancel, isLoading = fals
         description: initialData.description || "",
         location_type: (initialData.location_type as LocationType) || "village",
       })
+    } else if (defaultLocationType) {
+      setFormData((prev) => ({
+        ...prev,
+        location_type: (defaultLocationType as LocationType) || prev.location_type,
+      }))
     }
-  }, [initialData])
+  }, [initialData, defaultLocationType])
 
   const getLocationTypeLabel = (type: string) => {
     return t.marketplace?.locationTypes?.[type as LocationType] || type
@@ -76,12 +90,19 @@ export function LocationForm({ initialData, onSubmit, onCancel, isLoading = fals
           </SelectTrigger>
           <SelectContent>
             {LOCATION_TYPE_OPTIONS.map((type) => (
-              <SelectItem key={type} value={type}>
+              <SelectItem key={type} value={type} disabled={type === "dungeon"}>
                 {getLocationTypeLabel(type)}
+                {type === "dungeon" && " (usar sección dedicada)"}
               </SelectItem>
             ))}
           </SelectContent>
         </Select>
+        <Alert className="mt-2">
+          <Info className="h-4 w-4" />
+          <AlertDescription className="text-xs">
+            Para crear mazmorras, utiliza el botón "Crear Mazmorra" en la sección de Mazmorras y Dungeons
+          </AlertDescription>
+        </Alert>
       </div>
 
       <div className="space-y-2">

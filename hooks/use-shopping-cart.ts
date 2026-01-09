@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useCallback, useRef } from "react"
 import { ShoppingCartService, type CartWithItems, type CheckoutResult } from "@/lib/services/shopping-cart-service"
-import { useActiveCharacter } from "@/lib/active-character-context"
 import { useToast } from "@/hooks/use-toast"
 
 interface UseShoppingCartReturn {
@@ -19,8 +18,7 @@ interface UseShoppingCartReturn {
   canCheckout: (isGm: boolean) => Promise<{ canCheckout: boolean; error?: string }>
 }
 
-export function useShoppingCart(shopId: string | null): UseShoppingCartReturn {
-  const { activeCharacterId } = useActiveCharacter()
+export function useShoppingCart(shopId: string | null, characterId: string | null): UseShoppingCartReturn {
   const { toast } = useToast()
   const [cart, setCart] = useState<CartWithItems | null>(null)
   const [loading, setLoading] = useState(false)
@@ -44,7 +42,7 @@ export function useShoppingCart(shopId: string | null): UseShoppingCartReturn {
     // Verificar montaje antes de actualizar estado
     if (!isMountedRef.current) return
     
-    if (!activeCharacterId || !shopId) {
+    if (!characterId || !shopId) {
       if (isMountedRef.current) {
         setCart(null)
         setItemCount(0)
@@ -59,7 +57,7 @@ export function useShoppingCart(shopId: string | null): UseShoppingCartReturn {
     }
 
     try {
-      const cartData = await service.getCartWithItems(activeCharacterId, shopId)
+      const cartData = await service.getCartWithItems(characterId, shopId)
       console.log("[useShoppingCart] Cart data loaded:", {
         hasCart: !!cartData,
         itemsCount: cartData?.items?.length || 0,
@@ -125,7 +123,7 @@ export function useShoppingCart(shopId: string | null): UseShoppingCartReturn {
         setLoading(false)
       }
     }
-  }, [activeCharacterId, shopId])
+  }, [characterId, shopId])
 
   useEffect(() => {
     loadCart()
@@ -149,7 +147,7 @@ export function useShoppingCart(shopId: string | null): UseShoppingCartReturn {
 
   const addItem = useCallback(
     async (shopItemId: string, quantity: number): Promise<boolean> => {
-      if (!activeCharacterId || !shopId) {
+      if (!characterId || !shopId) {
         toast({
           title: "Error",
           description: "Character or shop not selected",
@@ -161,7 +159,7 @@ export function useShoppingCart(shopId: string | null): UseShoppingCartReturn {
       setError(null)
 
       try {
-        const cartData = await service.getOrCreateCart(activeCharacterId, shopId)
+        const cartData = await service.getOrCreateCart(characterId, shopId)
         if (!cartData) {
           toast({
             title: "Error",
@@ -202,7 +200,7 @@ export function useShoppingCart(shopId: string | null): UseShoppingCartReturn {
         return false
       }
     },
-    [activeCharacterId, shopId, loadCart, toast]
+    [characterId, shopId, loadCart, toast]
   )
 
   const updateItem = useCallback(
@@ -282,12 +280,12 @@ export function useShoppingCart(shopId: string | null): UseShoppingCartReturn {
   const checkout = useCallback(
     async (isGm: boolean): Promise<CheckoutResult> => {
       console.log("[useShoppingCart] Checkout called:", {
-        activeCharacterId,
+        characterId,
         shopId,
         isGm,
       })
       
-      if (!activeCharacterId || !shopId) {
+      if (!characterId || !shopId) {
         console.warn("[useShoppingCart] Missing character or shop ID")
         return { success: false, error: "Character or shop not selected" }
       }
@@ -297,7 +295,7 @@ export function useShoppingCart(shopId: string | null): UseShoppingCartReturn {
 
       try {
         console.log("[useShoppingCart] Calling service.checkoutCart...")
-        const result = await service.checkoutCart(activeCharacterId, shopId, isGm)
+        const result = await service.checkoutCart(characterId, shopId, isGm)
         console.log("[useShoppingCart] Service checkout result:", {
           success: result.success,
           error: result.error,
@@ -335,17 +333,17 @@ export function useShoppingCart(shopId: string | null): UseShoppingCartReturn {
         setLoading(false)
       }
     },
-    [activeCharacterId, shopId, loadCart, toast]
+    [characterId, shopId, loadCart, toast]
   )
 
   const canCheckout = useCallback(
     async (isGm: boolean): Promise<{ canCheckout: boolean; error?: string }> => {
-      if (!activeCharacterId || !shopId) {
+      if (!characterId || !shopId) {
         return { canCheckout: false, error: "Character or shop not selected" }
       }
 
       try {
-        const validation = await service.validateCheckout(activeCharacterId, shopId, isGm)
+        const validation = await service.validateCheckout(characterId, shopId, isGm)
         return {
           canCheckout: validation.valid,
           error: validation.error,
@@ -358,7 +356,7 @@ export function useShoppingCart(shopId: string | null): UseShoppingCartReturn {
         }
       }
     },
-    [activeCharacterId, shopId]
+    [characterId, shopId]
   )
 
   return {

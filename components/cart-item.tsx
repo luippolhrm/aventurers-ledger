@@ -13,7 +13,6 @@ interface CartItemProps {
   item: ShoppingCartItem
   onUpdateQuantity: (cartItemId: string, quantity: number) => Promise<void>
   onRemove: (cartItemId: string) => Promise<void>
-  language?: "es" // Mantener por compatibilidad, pero ya no se usa
 }
 
 function getRarityColor(rarity: string | null | undefined): string {
@@ -30,7 +29,7 @@ function getRarityColor(rarity: string | null | undefined): string {
   return colors[rarity.toLowerCase()] || colors.common
 }
 
-export function CartItem({ item, onUpdateQuantity, onRemove, language }: CartItemProps) {
+export function CartItem({ item, onUpdateQuantity, onRemove }: CartItemProps) {
   const { t } = useLanguage()
   const shopItem = item.shop_item
   const [quantity, setQuantity] = useState(item.quantity.toString())

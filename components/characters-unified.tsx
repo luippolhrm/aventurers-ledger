@@ -9,7 +9,6 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 // @deprecated - Solo se usa para mantener compatibilidad con el estado visual (highlighting)
 // TODO: Eliminar cuando se refactorice completamente el sistema de selección de personajes
-import { useActiveCharacter } from "@/lib/active-character-context"
 import { useAuth } from "@/lib/auth-context"
 import { useLanguage } from "@/lib/language-context"
 import { useServices } from "@/hooks/use-services"
@@ -44,7 +43,6 @@ export function CharactersUnified({ language }: CharactersUnifiedProps) {
   const [loading, setLoading] = useState(true)
   const [viewingCampaign, setViewingCampaign] = useState<{ characterId: string; campaignId: string } | null>(null)
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null)
-  const { activeCharacterId, setActiveCharacterId, triggerRefresh } = useActiveCharacter()
   const { t } = useLanguage()
 
   const services = useServices()
@@ -82,10 +80,6 @@ export function CharactersUnified({ language }: CharactersUnifiedProps) {
       
       // Personajes desactivados
       setArchivedCharacters(archivedData.filter((c) => c.archived))
-
-      if (!activeCharacterId && allActive.length > 0) {
-        setActiveCharacterId(allActive[0].id)
-      }
     } catch (error) {
       console.error("[v0] Error loading characters:", error)
       setMessage({ type: "error", text: "Error loading characters" })
@@ -104,14 +98,8 @@ export function CharactersUnified({ language }: CharactersUnifiedProps) {
       setMessage(null)
       await services.character.archiveCharacter(character.id)
 
-      if (character.id === activeCharacterId) {
-        const remaining = characters.filter((c) => c.id !== character.id)
-        setActiveCharacterId(remaining.length > 0 ? remaining[0].id : null)
-      }
-
       setMessage({ type: "success", text: "Personaje desactivado exitosamente" })
       await loadCharacters()
-      triggerRefresh()
 
       setTimeout(() => {
         setMessage(null)
@@ -133,7 +121,6 @@ export function CharactersUnified({ language }: CharactersUnifiedProps) {
 
       setMessage({ type: "success", text: "Personaje activado exitosamente" })
       await loadCharacters()
-      triggerRefresh()
 
       setTimeout(() => {
         setMessage(null)
@@ -214,12 +201,7 @@ export function CharactersUnified({ language }: CharactersUnifiedProps) {
             {assignedCharacters.map((character) => (
               <Card
                 key={character.id}
-                className={`cursor-pointer hover:bg-accent transition-colors border-purple-200 dark:border-purple-800 ${
-                  character.id === activeCharacterId 
-                    ? "border-primary bg-primary/5" 
-                    : ""
-                }`}
-                onClick={() => router.push(`/characters/${character.id}/sheet`)}
+                className="border-purple-200 dark:border-purple-800"
               >
                 <CardHeader>
                   <div className="flex items-start justify-between">
@@ -254,6 +236,17 @@ export function CharactersUnified({ language }: CharactersUnifiedProps) {
                         size="sm"
                         onClick={(e) => {
                           e.stopPropagation()
+                          router.push(`/characters/${character.id}/sheet`)
+                        }}
+                      >
+                        <FileText className="h-4 w-4 mr-1 md:mr-2" />
+                        <span className="hidden sm:inline">Ver Hoja</span>
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={(e) => {
+                          e.stopPropagation()
                           handleEditProfile(character)
                         }}
                       >
@@ -281,12 +274,7 @@ export function CharactersUnified({ language }: CharactersUnifiedProps) {
             {freeCharacters.map((character) => (
               <Card
                 key={character.id}
-                className={`cursor-pointer hover:bg-accent transition-colors border-green-200 dark:border-green-800 ${
-                  character.id === activeCharacterId 
-                    ? "border-primary bg-primary/5" 
-                    : ""
-                }`}
-                onClick={() => router.push(`/characters/${character.id}/sheet`)}
+                className="border-green-200 dark:border-green-800"
               >
                 <CardHeader>
                   <div className="flex items-start justify-between">
@@ -351,8 +339,7 @@ export function CharactersUnified({ language }: CharactersUnifiedProps) {
                   {archivedCharacters.map((character) => (
                     <Card
                       key={character.id}
-                      className="cursor-pointer hover:bg-muted/50 transition-colors border-gray-200 dark:border-gray-800 opacity-60"
-                      onClick={() => router.push(`/characters/${character.id}/sheet`)}
+                      className="border-gray-200 dark:border-gray-800 opacity-60"
                     >
                       <CardHeader>
                         <div className="flex items-start justify-between">

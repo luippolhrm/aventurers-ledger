@@ -5,48 +5,49 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Button } from "@/components/ui/button"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Badge } from "@/components/ui/badge"
 import { useLanguage } from "@/lib/language-context"
 import type { Shop } from "@/lib/infrastructure/repositories/shop-repository"
 import type { Npc } from "@/lib/infrastructure/repositories/npc-repository"
-import { Plus } from "lucide-react"
-
-const SHOP_TYPE_OPTIONS = ["inn", "general", "smith", "jewelry", "market", "atelier"] as const
-type ShopType = (typeof SHOP_TYPE_OPTIONS)[number]
+import { SHOP_TYPE_OPTIONS, SHOP_TYPE_METADATA, type ShopType } from "@/lib/constants/shop-constants"
+import { MapPin, Info } from "lucide-react"
 
 interface ShopFormData {
   name: string
   description: string
   shop_type: ShopType
-  shopkeeper_name: string
   selectedNpcId: string
 }
 
 interface ShopFormProps {
   initialData?: Shop
+  locationInfo?: { name: string; type: string | null }
   standaloneNpcs?: Npc[]
   selectedNpcId?: string
   onSubmit: (data: ShopFormData) => Promise<void>
   onCancel: () => void
-  onCreateNpc?: () => void
   isLoading?: boolean
+  getLocationTypeLabel?: (type: string) => string
+  getLocationTypeBadgeColor?: (type: string | null) => string
 }
 
 export function ShopForm({
   initialData,
+  locationInfo,
   standaloneNpcs = [],
   selectedNpcId: initialSelectedNpcId,
   onSubmit,
   onCancel,
-  onCreateNpc,
   isLoading = false,
+  getLocationTypeLabel,
+  getLocationTypeBadgeColor,
 }: ShopFormProps) {
   const { t } = useLanguage()
   const [formData, setFormData] = useState<ShopFormData>({
     name: initialData?.name || "",
     description: initialData?.description || "",
-    shop_type: (initialData?.shop_type as ShopType) || "general",
-    shopkeeper_name: initialData?.shopkeeper_name || "",
+    shop_type: (initialData?.shop_type as ShopType) || "general_store",
     selectedNpcId: initialSelectedNpcId || "",
   })
 
@@ -55,8 +56,7 @@ export function ShopForm({
       setFormData({
         name: initialData.name || "",
         description: initialData.description || "",
-        shop_type: (initialData.shop_type as ShopType) || "general",
-        shopkeeper_name: initialData.shopkeeper_name || "",
+        shop_type: (initialData.shop_type as ShopType) || "general_store",
         selectedNpcId: initialSelectedNpcId || "",
       })
     } else if (initialSelectedNpcId) {
@@ -68,6 +68,16 @@ export function ShopForm({
     return t.marketplace?.shopTypes?.[type as ShopType] || type
   }
 
+  const getSelectedShopTypeMetadata = () => {
+    if (!formData.shop_type) return null
+    const metadata = SHOP_TYPE_METADATA[formData.shop_type as ShopType]
+    const description = t.marketplace?.shopTypeDescriptions?.[formData.shop_type as ShopType]
+    const characteristics = t.marketplace?.shopTypeCharacteristics?.[formData.shop_type as ShopType]
+    return { metadata, description, characteristics }
+  }
+
+  const selectedTypeInfo = getSelectedShopTypeMetadata()
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!formData.name.trim()) return
@@ -76,19 +86,34 @@ export function ShopForm({
 
   const handleNpcSelect = (npcId: string) => {
     if (npcId === "none") {
-      setFormData({ ...formData, selectedNpcId: "", shopkeeper_name: "" })
+      setFormData({ ...formData, selectedNpcId: "" })
     } else {
-      const selectedNpc = standaloneNpcs.find((npc) => npc.id === npcId)
       setFormData({
         ...formData,
         selectedNpcId: npcId,
-        shopkeeper_name: selectedNpc?.name || "",
       })
     }
   }
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
+      {locationInfo && (
+        <div className="p-3 bg-muted rounded-lg border">
+          <div className="flex items-center gap-2 flex-wrap">
+            <MapPin className="w-4 h-4 text-muted-foreground" />
+            <span className="text-sm text-muted-foreground">Ubicación:</span>
+            <span className="text-sm font-medium">{locationInfo.name}</span>
+            {locationInfo.type && getLocationTypeLabel && getLocationTypeBadgeColor && (
+              <span
+                className={`inline-block text-xs px-2 py-1 rounded-full uppercase ${getLocationTypeBadgeColor(locationInfo.type)}`}
+              >
+                {getLocationTypeLabel(locationInfo.type)}
+              </span>
+            )}
+          </div>
+        </div>
+      )}
+
       <div className="space-y-2">
         <Label htmlFor="name">{t.marketplace?.shopName || "Nombre de la Tienda"}</Label>
         <Input
@@ -117,6 +142,33 @@ export function ShopForm({
             ))}
           </SelectContent>
         </Select>
+        {selectedTypeInfo && selectedTypeInfo.description && (
+          <Alert>
+            <Info className="w-4 h-4" />
+            <AlertDescription className="space-y-2">
+              <p className="text-sm">{selectedTypeInfo.description}</p>
+              {selectedTypeInfo.characteristics && (
+                <div className="flex flex-wrap gap-2 mt-2">
+                  {selectedTypeInfo.characteristics.typicalItems && (
+                    <Badge variant="secondary" className="text-xs">
+                      Items: {selectedTypeInfo.characteristics.typicalItems}
+                    </Badge>
+                  )}
+                  {selectedTypeInfo.characteristics.maxRarity && (
+                    <Badge variant="secondary" className="text-xs">
+                      Rareza máx: {selectedTypeInfo.characteristics.maxRarity}
+                    </Badge>
+                  )}
+                  {selectedTypeInfo.characteristics.services && (
+                    <Badge variant="secondary" className="text-xs">
+                      Servicios: {selectedTypeInfo.characteristics.services}
+                    </Badge>
+                  )}
+                </div>
+              )}
+            </AlertDescription>
+          </Alert>
+        )}
       </div>
 
       <div className="space-y-2">
@@ -130,27 +182,10 @@ export function ShopForm({
         />
       </div>
 
+      {/* Campo unificado para NPC */}
       <div className="space-y-2">
-        <div className="flex items-center justify-between">
-          <Label htmlFor="shopkeeper">{t.marketplace?.shopkeeperName || "Tendero (Opcional)"}</Label>
-          {onCreateNpc && (
-            <Button type="button" variant="outline" size="sm" onClick={onCreateNpc}>
-              <Plus className="w-4 h-4 mr-2" />
-              Crear Nuevo NPC
-            </Button>
-          )}
-        </div>
-        <Input
-          id="shopkeeper"
-          value={formData.shopkeeper_name}
-          onChange={(e) => setFormData({ ...formData, shopkeeper_name: e.target.value })}
-          placeholder={t.marketplace?.enterShopkeeperName || "Ingresa el nombre del tendero o selecciona un NPC"}
-        />
-      </div>
-
-      {standaloneNpcs.length > 0 && (
-        <div className="space-y-2">
-          <Label>Asignar NPC Existente (Opcional)</Label>
+        <Label>Asignar NPC (Opcional)</Label>
+        {standaloneNpcs.length > 0 ? (
           <Select value={formData.selectedNpcId || "none"} onValueChange={handleNpcSelect}>
             <SelectTrigger>
               <SelectValue placeholder="Selecciona un NPC de tu campaña" />
@@ -164,8 +199,12 @@ export function ShopForm({
               ))}
             </SelectContent>
           </Select>
-        </div>
-      )}
+        ) : (
+          <p className="text-sm text-muted-foreground">
+            No hay NPCs disponibles. Crea NPCs en la sección de NPCs de tu campaña.
+          </p>
+        )}
+      </div>
 
       <div className="flex gap-2 justify-end">
         <button

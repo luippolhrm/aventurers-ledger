@@ -34,13 +34,12 @@ interface ShopItem {
 }
 
 interface ShopCatalogProps {
-  language?: "es" // Mantener por compatibilidad, pero ya no se usa
   shopId: string
   characterId: string
   isGm: boolean
 }
 
-export function ShopCatalog({ language, shopId, characterId, isGm }: ShopCatalogProps) {
+export function ShopCatalog({ shopId, characterId, isGm }: ShopCatalogProps) {
   const { t } = useLanguage()
   const services = useServices()
   const { user } = useAuth()

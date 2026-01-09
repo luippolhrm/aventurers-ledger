@@ -6,6 +6,7 @@ import { LocationCard } from "@/components/molecules/world/location-card"
 import type { Location } from "@/lib/infrastructure/repositories/location-repository"
 import { MapPin } from "lucide-react"
 import { useLanguage } from "@/lib/language-context"
+import { useRouter } from "next/navigation"
 
 interface LocationsTabProps {
   locations: Location[]
@@ -13,6 +14,8 @@ interface LocationsTabProps {
   language?: "es" // Mantener por compatibilidad, pero ya no se usa
   onLocationSelect: (locationId: string) => void
   getLocationTypeLabel: (type: string) => string
+  campaignId: string
+  isOwner: boolean
 }
 
 export function LocationsTab({
@@ -21,8 +24,11 @@ export function LocationsTab({
   language,
   onLocationSelect,
   getLocationTypeLabel,
+  campaignId,
+  isOwner,
 }: LocationsTabProps) {
   const { t } = useLanguage()
+  const router = useRouter()
 
   return (
     <div className="space-y-4">
@@ -48,6 +54,7 @@ export function LocationsTab({
               language={language}
               onClick={() => onLocationSelect(location.id)}
               getLocationTypeLabel={getLocationTypeLabel}
+              onEdit={isOwner ? () => router.push(`/campaigns/${campaignId}/locations/${location.id}`) : undefined}
             />
           ))}
         </div>

@@ -10,10 +10,10 @@ import { useAuth } from "@/lib/auth-context"
 import { useLanguage } from "@/lib/language-context"
 import { useServices } from "@/hooks/use-services"
 import type { Campaign } from "@/lib/infrastructure/repositories"
-import { MapPin, Edit, Plus, Trash2 } from "lucide-react"
+import { MapPin, Edit, Plus, Trash2, Users } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 
-const LOCATION_TYPE_OPTIONS = ["village", "forest", "camp", "port", "ruins", "city"] as const
+const LOCATION_TYPE_OPTIONS = ["village", "forest", "camp", "port", "ruins", "city", "dungeon"] as const
 
 type LocationType = (typeof LOCATION_TYPE_OPTIONS)[number]
 
@@ -275,22 +275,34 @@ export function LocationsMapContent({ language, campaignId: propCampaignId }: Lo
 
       {/* Main Content - Locations List */}
       <div className="space-y-4">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between flex-wrap gap-2">
           <h3 className="text-xl font-semibold flex items-center gap-2">
             <MapPin className="w-5 h-5" />
             {t.marketplace?.yourLocations || "Ubicaciones"}
           </h3>
-          {isOwner && (
-            <Button onClick={() => {
-              const campaignIdToUse = getCampaignId()
-              if (campaignIdToUse) {
-                router.push(`/campaigns/${campaignIdToUse}/locations/new`)
-              }
-            }}>
-              <Plus className="w-4 h-4 mr-2" />
-              {t.marketplace?.createLocation || "Crear Ubicación"}
-            </Button>
-          )}
+          <div className="flex gap-2">
+            {propCampaignId && (
+              <Button
+                variant="outline"
+                onClick={() => router.push(`/campaigns/${propCampaignId}/npcs`)}
+                className="flex items-center gap-2"
+              >
+                <Users className="w-4 h-4" />
+                {t.marketplace?.npcs?.title || "NPCs"}
+              </Button>
+            )}
+            {isOwner && (
+              <Button onClick={() => {
+                const campaignIdToUse = getCampaignId()
+                if (campaignIdToUse) {
+                  router.push(`/campaigns/${campaignIdToUse}/locations/new`)
+                }
+              }}>
+                <Plus className="w-4 h-4 mr-2" />
+                {t.marketplace?.createLocation || "Crear Ubicación"}
+              </Button>
+            )}
+          </div>
         </div>
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {locations.map((location) => (

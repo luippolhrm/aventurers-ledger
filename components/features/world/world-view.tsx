@@ -2,25 +2,20 @@
 
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useAuth } from "@/lib/auth-context"
 import { useServices } from "@/hooks/use-services"
 import { useToast } from "@/hooks/use-toast"
 import { LoadingState } from "@/components/molecules/loading"
-import { LocationsTab } from "@/components/organisms/world/locations-tab"
-import { ShopsTab } from "@/components/organisms/world/shops-tab"
-import { NpcsTab } from "@/components/organisms/world/npcs-tab"
+import { LocationsSection } from "@/components/organisms/world/locations-section"
+import { ShopsSection } from "@/components/organisms/world/shops-section"
 import type { Location } from "@/lib/infrastructure/repositories/location-repository"
 import type { Shop } from "@/lib/infrastructure/repositories/shop-repository"
-import type { Npc } from "@/lib/infrastructure/repositories/npc-repository"
-import { MapPin, Store, Users } from "lucide-react"
+import { ArrowLeft } from "lucide-react"
 import { useLanguage } from "@/lib/language-context"
+import { Button } from "@/components/ui/button"
+import { type ShopType } from "@/lib/constants/shop-constants"
 
-const LOCATION_TYPE_OPTIONS = ["village", "forest", "camp", "port", "ruins", "city"] as const
-const SHOP_TYPE_OPTIONS = ["inn", "general", "smith", "jewelry", "market", "atelier"] as const
-
-type LocationType = (typeof LOCATION_TYPE_OPTIONS)[number]
-type ShopType = (typeof SHOP_TYPE_OPTIONS)[number]
+type LocationType = "village" | "forest" | "camp" | "port" | "ruins" | "city" | "dungeon"
 
 interface WorldViewProps {
   campaignId: string
@@ -37,10 +32,8 @@ export function WorldView({ campaignId, language }: WorldViewProps) {
   const [locations, setLocations] = useState<Location[]>([])
   const [selectedLocationId, setSelectedLocationId] = useState<string>("")
   const [shops, setShops] = useState<Shop[]>([])
-  const [selectedShopId, setSelectedShopId] = useState<string>("")
-  const [standaloneNpcs, setStandaloneNpcs] = useState<Npc[]>([])
-  const [activeTab, setActiveTab] = useState<"locations" | "shops" | "npcs">("locations")
   const [loading, setLoading] = useState(true)
+  const [isOwner, setIsOwner] = useState(false)
 
   useEffect(() => {
     if (user && campaignId) {
@@ -53,7 +46,6 @@ export function WorldView({ campaignId, language }: WorldViewProps) {
       loadShops()
     } else {
       setShops([])
-      setSelectedShopId("")
     }
   }, [selectedLocationId])
 
@@ -62,7 +54,7 @@ export function WorldView({ campaignId, language }: WorldViewProps) {
 
     setLoading(true)
     try {
-      await Promise.all([loadLocations(), loadStandaloneNpcs()])
+      await loadLocations()
     } catch (error) {
       console.error("[v0] WorldView: Error loading data:", error)
     } finally {
@@ -77,7 +69,11 @@ export function WorldView({ campaignId, language }: WorldViewProps) {
     }
 
     try {
-      const locationsData = await services.location.getLocationsByCampaign(campaignId)
+      const [campaign, locationsData] = await Promise.all([
+        services.campaign.getCampaign(campaignId),
+        services.location.getLocationsByCampaign(campaignId),
+      ])
+      setIsOwner(campaign.game_master_id === user.id)
       setLocations(locationsData)
     } catch (error: any) {
       console.error("[v0] WorldView: Error loading locations:", error)
@@ -110,28 +106,8 @@ export function WorldView({ campaignId, language }: WorldViewProps) {
     }
   }
 
-  const loadStandaloneNpcs = async () => {
-    if (!campaignId || !user) {
-      setStandaloneNpcs([])
-      return
-    }
-
-    try {
-      const npcsData = await services.npc.getNpcsByCampaign(campaignId)
-      setStandaloneNpcs(npcsData)
-    } catch (error: any) {
-      console.error("[v0] WorldView: Error loading NPCs:", error)
-      toast({
-        title: t.inventory?.error || "Error",
-        description: error?.message || "Error al cargar NPCs",
-        variant: "destructive",
-      })
-      setStandaloneNpcs([])
-    }
-  }
 
   const selectedLocation = locations.find((location) => location.id === selectedLocationId)
-  const selectedShop = shops.find((shop) => shop.id === selectedShopId)
 
   const getLocationTypeLabel = (type: string) => {
     return t.marketplace?.locationTypes?.[type as LocationType] || type
@@ -146,51 +122,40 @@ export function WorldView({ campaignId, language }: WorldViewProps) {
   }
 
   return (
-    <div className="space-y-4">
-      <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as "locations" | "shops" | "npcs")} className="w-full">
-        <TabsList className="grid w-full grid-cols-3 max-w-2xl gap-1">
-          <TabsTrigger value="locations" className="text-xs sm:text-sm">
-            <MapPin className="w-3 h-3 sm:w-4 sm:h-4 sm:mr-2" />
-            <span className="hidden sm:inline">{t.marketplace?.yourLocations || "Ubicaciones"}</span>
-            <span className="sm:hidden">Ubic.</span>
-          </TabsTrigger>
-          <TabsTrigger value="shops" className="text-xs sm:text-sm">
-            <Store className="w-3 h-3 sm:w-4 sm:h-4 sm:mr-2" />
-            <span className="hidden sm:inline">{t.marketplace?.shops || "Tiendas"}</span>
-            <span className="sm:hidden">Tiendas</span>
-          </TabsTrigger>
-          <TabsTrigger value="npcs" className="text-xs sm:text-sm">
-            <Users className="w-3 h-3 sm:w-4 sm:h-4 sm:mr-2" />
-            NPCs
-          </TabsTrigger>
-        </TabsList>
+    <div className="space-y-6">
+      {/* Botón Volver */}
+      <Button
+        variant="ghost"
+        onClick={() => router.push(`/campaigns/${campaignId}`)}
+        className="text-sm md:text-base"
+      >
+        <ArrowLeft className="w-4 h-4 mr-2" />
+        Volver a Campaña
+      </Button>
 
-        <TabsContent value="locations" className="space-y-4 mt-6">
-          <LocationsTab
-            locations={locations}
-            selectedLocationId={selectedLocationId}
-            language={language}
-            onLocationSelect={setSelectedLocationId}
-            getLocationTypeLabel={getLocationTypeLabel}
-          />
-        </TabsContent>
+      {/* Sección de Ubicaciones */}
+      <LocationsSection
+        locations={locations}
+        selectedLocationId={selectedLocationId}
+        language={language}
+        onLocationSelect={setSelectedLocationId}
+        getLocationTypeLabel={getLocationTypeLabel}
+        campaignId={campaignId}
+        isOwner={isOwner}
+      />
 
-        <TabsContent value="shops" className="space-y-4 mt-6">
-          <ShopsTab
-            shops={shops}
-            selectedShopId={selectedShopId}
-            selectedLocation={selectedLocation}
-            language={language}
-            onShopSelect={setSelectedShopId}
-            onViewItems={(shopId) => router.push(`/shop-items/${shopId}?role=player`)}
-            getShopTypeLabel={getShopTypeLabel}
-          />
-        </TabsContent>
-
-        <TabsContent value="npcs" className="space-y-4 mt-6">
-          <NpcsTab npcs={standaloneNpcs} language={language} />
-        </TabsContent>
-      </Tabs>
+      {/* Sección de Tiendas - Solo se muestra si hay ubicación seleccionada */}
+      {selectedLocation && (
+        <ShopsSection
+          shops={shops}
+          selectedLocation={selectedLocation}
+          language={language}
+          onViewItems={(shopId) => router.push(`/shop-items/${shopId}?role=player`)}
+          getShopTypeLabel={getShopTypeLabel}
+          campaignId={campaignId}
+          isOwner={isOwner}
+        />
+      )}
     </div>
   )
 }

@@ -8,14 +8,13 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { LoadingState } from "@/components/molecules/loading"
 import { EmptyState } from "@/components/molecules/empty"
 import { Badge } from "@/components/ui/badge"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useAuth } from "@/lib/auth-context"
 import { useServices } from "@/hooks/use-services"
 import { useLanguage } from "@/lib/language-context"
 import { ShopForm } from "./shop-form"
-import { ArrowLeft, Store, Users, Package, Edit, Trash2, Plus } from "lucide-react"
+import { ArrowLeft, Store, Package, Edit, Trash2, MapPin } from "lucide-react"
 import type { Shop } from "@/lib/infrastructure/repositories/shop-repository"
-import type { Npc } from "@/lib/infrastructure/repositories/npc-repository"
+import type { Location } from "@/lib/infrastructure/repositories/location-repository"
 
 interface ShopViewProps {
   campaignId: string
@@ -23,18 +22,8 @@ interface ShopViewProps {
   shopId: string
 }
 
-interface ShopNpcRow {
-  id: string
-  name: string
-  title: string | null
-  resistances: string | null
-  story: string | null
-  shop_id: string
-  npc_id: string | null
-}
 
-const SHOP_TYPE_OPTIONS = ["inn", "general", "smith", "jewelry", "market", "atelier"] as const
-type ShopType = (typeof SHOP_TYPE_OPTIONS)[number]
+import { type ShopType } from "@/lib/constants/shop-constants"
 
 export function ShopView({ campaignId, locationId, shopId }: ShopViewProps) {
   const { t } = useLanguage()
@@ -43,15 +32,14 @@ export function ShopView({ campaignId, locationId, shopId }: ShopViewProps) {
   const services = useServices()
 
   const [shop, setShop] = useState<Shop | null>(null)
-  const [shopNpcs, setShopNpcs] = useState<ShopNpcRow[]>([])
-  const [standaloneNpcs, setStandaloneNpcs] = useState<Npc[]>([])
+  const [location, setLocation] = useState<Location | null>(null)
+  const [standaloneNpcs, setStandaloneNpcs] = useState<any[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [isOwner, setIsOwner] = useState(false)
   const [isEditing, setIsEditing] = useState(false)
-  const [assignedNpcId, setAssignedNpcId] = useState<string>("")
 
   useEffect(() => {
     if (user && campaignId && locationId && shopId) {
@@ -65,34 +53,18 @@ export function ShopView({ campaignId, locationId, shopId }: ShopViewProps) {
     setIsLoading(true)
     setError(null)
     try {
-      const [campaignData, shopData, npcs] = await Promise.all([
+      const [campaignData, shopData, locationData, npcs] = await Promise.all([
         services.campaign.getCampaign(campaignId),
         services.shop.getShop(shopId),
+        services.location.getLocation(locationId),
         services.npc.getNpcsByCampaign(campaignId),
       ])
 
       const owner = campaignData.game_master_id === user.id
       setIsOwner(owner)
       setShop(shopData)
+      setLocation(locationData)
       setStandaloneNpcs(npcs)
-
-      // Cargar shop_npcs
-      const { createBrowserClient } = await import("@/lib/supabase/client")
-      const supabase = createBrowserClient()
-      const { data: shopNpcData } = await supabase
-        .from("shop_npcs")
-        .select("*")
-        .eq("shop_id", shopId)
-        .order("created_at", { ascending: false })
-
-      if (shopNpcData) {
-        setShopNpcs(shopNpcData as ShopNpcRow[])
-        // Buscar el npc_id asignado
-        const assignedNpc = shopNpcData.find((sn) => sn.npc_id) as ShopNpcRow | undefined
-        if (assignedNpc?.npc_id) {
-          setAssignedNpcId(assignedNpc.npc_id)
-        }
-      }
     } catch (err: any) {
       console.error("Error loading data:", err)
       setError(err?.message || "Error al cargar los datos")
@@ -114,7 +86,6 @@ export function ShopView({ campaignId, locationId, shopId }: ShopViewProps) {
     name: string
     description: string
     shop_type: string
-    shopkeeper_name: string
     selectedNpcId: string
   }) => {
     if (!user || !shop) return
@@ -125,7 +96,6 @@ export function ShopView({ campaignId, locationId, shopId }: ShopViewProps) {
       const updated = await services.shop.updateShop(shopId, {
         name: formData.name.trim(),
         description: formData.description || null,
-        shopkeeper_name: formData.shopkeeper_name || null,
         shop_type: formData.shop_type,
       })
       setShop(updated)
@@ -139,13 +109,18 @@ export function ShopView({ campaignId, locationId, shopId }: ShopViewProps) {
 
       // Si hay un NPC seleccionado, crear la relación
       if (formData.selectedNpcId && formData.selectedNpcId !== "none") {
-        await supabase.from("shop_npcs").insert({
-          shop_id: shopId,
-          npc_id: formData.selectedNpcId,
-        })
-        setAssignedNpcId(formData.selectedNpcId)
-      } else {
-        setAssignedNpcId("")
+        // Buscar el NPC en el array standaloneNpcs que ya tenemos cargado
+        const selectedNpc = standaloneNpcs.find((npc) => npc.id === formData.selectedNpcId)
+        
+        if (selectedNpc) {
+          await supabase.from("shop_npcs").insert({
+            shop_id: shopId,
+            npc_id: formData.selectedNpcId,
+            name: selectedNpc.name, // Campo requerido por la tabla shop_npcs
+          })
+        } else {
+          throw new Error("No se pudo encontrar el NPC seleccionado")
+        }
       }
 
       setIsEditing(false)
@@ -181,6 +156,19 @@ export function ShopView({ campaignId, locationId, shopId }: ShopViewProps) {
     return t.marketplace?.shopTypes?.[type as ShopType] || type
   }
 
+  const getLocationTypeLabel = (type: string) => {
+    const locationTypes = t.marketplace?.locationTypes
+    if (!locationTypes) return type
+    return (locationTypes as Record<string, string>)[type] || type
+  }
+
+  const getLocationTypeBadgeColor = (locationType: string | null): string => {
+    if (locationType === "dungeon") {
+      return "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200"
+    }
+    return "bg-primary/10 text-primary"
+  }
+
   if (isLoading) {
     return <LoadingState message="Cargando tienda..." />
   }
@@ -196,7 +184,11 @@ export function ShopView({ campaignId, locationId, shopId }: ShopViewProps) {
           <ArrowLeft className="w-4 h-4 mr-2" />
           Volver a Ubicación
         </Button>
-        <EmptyState title="Tienda no encontrada" description="La tienda solicitada no existe" />
+        <EmptyState
+          icon={Store}
+          title="Tienda no encontrada"
+          description="La tienda solicitada no existe"
+        />
       </div>
     )
   }
@@ -229,12 +221,14 @@ export function ShopView({ campaignId, locationId, shopId }: ShopViewProps) {
           <CardContent>
             <ShopForm
               initialData={shop}
+              locationInfo={location ? { name: location.name, type: location.location_type } : undefined}
               standaloneNpcs={standaloneNpcs}
-              selectedNpcId={assignedNpcId}
+              selectedNpcId=""
               onSubmit={handleSubmit}
               onCancel={handleCancelEdit}
-              onCreateNpc={() => router.push(`/campaigns/${campaignId}/npcs/new?returnTo=shop&locationId=${locationId}&shopId=${shopId}`)}
               isLoading={isSaving}
+              getLocationTypeLabel={getLocationTypeLabel}
+              getLocationTypeBadgeColor={getLocationTypeBadgeColor}
             />
           </CardContent>
         </Card>
@@ -256,11 +250,6 @@ export function ShopView({ campaignId, locationId, shopId }: ShopViewProps) {
                       {getShopTypeLabel(shop.shop_type)}
                     </Badge>
                   )}
-                  {shop.shopkeeper_name && (
-                    <p className="text-sm text-muted-foreground mt-2">
-                      {t.marketplace?.shopkeeper || "Tendero"}: {shop.shopkeeper_name}
-                    </p>
-                  )}
                 </div>
                 {isOwner && (
                   <div className="flex gap-2">
@@ -278,71 +267,16 @@ export function ShopView({ campaignId, locationId, shopId }: ShopViewProps) {
             </CardHeader>
           </Card>
 
-          <Tabs defaultValue="npcs" className="w-full">
-            <TabsList>
-              <TabsTrigger value="npcs">
-                <Users className="w-4 h-4 mr-2" />
-                NPCs ({shopNpcs.length})
-              </TabsTrigger>
-              <TabsTrigger value="items">
-                <Package className="w-4 h-4 mr-2" />
-                Items
-              </TabsTrigger>
-            </TabsList>
-            <TabsContent value="npcs" className="space-y-4">
-              {isOwner && (
-                <Button
-                  onClick={() => router.push(`/campaigns/${campaignId}/locations/${locationId}/shops/${shopId}/npcs/new`)}
-                  className="w-full sm:w-auto"
-                >
-                  <Plus className="w-4 h-4 mr-2" />
-                  Crear NPC de Tienda
-                </Button>
-              )}
-              {shopNpcs.length === 0 ? (
-                <Card>
-                  <CardContent className="py-8 text-center text-muted-foreground">
-                    <p>No hay NPCs en esta tienda</p>
-                    {isOwner && (
-                      <Button
-                        variant="outline"
-                        className="mt-4"
-                        onClick={() => router.push(`/campaigns/${campaignId}/locations/${locationId}/shops/${shopId}/npcs/new`)}
-                      >
-                        <Plus className="w-4 h-4 mr-2" />
-                        Crear Primer NPC
-                      </Button>
-                    )}
-                  </CardContent>
-                </Card>
-              ) : (
-                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                  {shopNpcs.map((npc) => (
-                    <Card
-                      key={npc.id}
-                      className="cursor-pointer hover:bg-muted/50 transition-colors"
-                      onClick={() => router.push(`/campaigns/${campaignId}/locations/${locationId}/shops/${shopId}/npcs/${npc.id}`)}
-                    >
-                      <CardHeader>
-                        <CardTitle>{npc.name}</CardTitle>
-                        {npc.title && <CardDescription>{npc.title}</CardDescription>}
-                      </CardHeader>
-                    </Card>
-                  ))}
-                </div>
-              )}
-            </TabsContent>
-            <TabsContent value="items" className="space-y-4">
-              <Button
-                variant="outline"
-                className="w-full"
-                onClick={() => router.push(`/shop-items/${shopId}?role=${isOwner ? "game_master" : "player"}`)}
-              >
-                <Package className="w-4 h-4 mr-2" />
-                {isOwner ? (t.marketplace?.manageItems || "Gestionar Items") : (t.marketplace?.viewItems || "Ver Items")}
-              </Button>
-            </TabsContent>
-          </Tabs>
+          <div className="space-y-4">
+            <Button
+              variant="outline"
+              className="w-full"
+              onClick={() => router.push(`/shop-items/${shopId}?role=${isOwner ? "game_master" : "player"}`)}
+            >
+              <Package className="w-4 h-4 mr-2" />
+              {isOwner ? (t.marketplace?.manageItems || "Gestionar Items") : (t.marketplace?.viewItems || "Ver Items")}
+            </Button>
+          </div>
         </>
       )}
     </div>

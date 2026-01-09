@@ -3,16 +3,17 @@
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Separator } from "@/components/ui/separator"
 import { Button } from "@/components/ui/button"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { LoadingState } from "@/components/molecules/loading"
 import { EmptyState } from "@/components/molecules/empty"
 import { Badge } from "@/components/ui/badge"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useAuth } from "@/lib/auth-context"
 import { useServices } from "@/hooks/use-services"
 import { useLanguage } from "@/lib/language-context"
 import { LocationForm } from "./location-form"
+import { UnifiedDungeonView } from "@/components/features/dungeons/unified-dungeon-view"
 import { ArrowLeft, MapPin, Store, Edit, Trash2, Plus } from "lucide-react"
 import type { Location } from "@/lib/infrastructure/repositories/location-repository"
 import type { Shop } from "@/lib/infrastructure/repositories/shop-repository"
@@ -22,7 +23,7 @@ interface LocationViewProps {
   locationId: string
 }
 
-const LOCATION_TYPE_OPTIONS = ["village", "forest", "camp", "port", "ruins", "city"] as const
+const LOCATION_TYPE_OPTIONS = ["village", "forest", "camp", "port", "ruins", "city", "dungeon"] as const
 type LocationType = (typeof LOCATION_TYPE_OPTIONS)[number]
 
 export function LocationView({ campaignId, locationId }: LocationViewProps) {
@@ -137,7 +138,7 @@ export function LocationView({ campaignId, locationId }: LocationViewProps) {
           <ArrowLeft className="w-4 h-4 mr-2" />
           Volver a Campaña
         </Button>
-        <EmptyState title="Ubicación no encontrada" description="La ubicación solicitada no existe" />
+        <EmptyState icon={MapPin} title="Ubicación no encontrada" description="La ubicación solicitada no existe" />
       </div>
     )
   }
@@ -176,6 +177,15 @@ export function LocationView({ campaignId, locationId }: LocationViewProps) {
             />
           </CardContent>
         </Card>
+      ) : location.location_type === "dungeon" ? (
+        <UnifiedDungeonView
+          campaignId={campaignId}
+          locationId={locationId}
+          location={location}
+          shops={shops}
+          isOwner={isOwner}
+          onUpdate={loadData}
+        />
       ) : (
         <>
           <Card>
@@ -211,41 +221,51 @@ export function LocationView({ campaignId, locationId }: LocationViewProps) {
             </CardHeader>
           </Card>
 
-          <Tabs defaultValue="shops" className="w-full">
-            <TabsList>
-              <TabsTrigger value="shops">
-                <Store className="w-4 h-4 mr-2" />
-                Tiendas ({shops.length})
-              </TabsTrigger>
-            </TabsList>
-            <TabsContent value="shops" className="space-y-4">
-              {isOwner && (
-                <Button
-                  onClick={() => router.push(`/campaigns/${campaignId}/locations/${locationId}/shops/new`)}
-                  className="w-full sm:w-auto"
-                >
-                  <Plus className="w-4 h-4 mr-2" />
-                  Crear Tienda
-                </Button>
-              )}
+          {/* Sección de Tiendas */}
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between gap-4 flex-wrap">
+                <div className="space-y-1 flex-1 min-w-0">
+                  <CardTitle className="flex items-center gap-2">
+                    <Store className="w-5 h-5" />
+                    Tiendas ({shops.length})
+                  </CardTitle>
+                  <CardDescription>
+                    Tiendas disponibles en esta ubicación
+                  </CardDescription>
+                </div>
+                {isOwner && (
+                  <Button
+                    onClick={() => router.push(`/campaigns/${campaignId}/locations/${locationId}/shops/new`)}
+                    className="shrink-0"
+                  >
+                    <Plus className="w-4 h-4 mr-2" />
+                    <span className="hidden sm:inline">Crear Tienda</span>
+                    <span className="sm:hidden">Crear</span>
+                  </Button>
+                )}
+              </div>
+            </CardHeader>
+            <Separator />
+            <CardContent className="pt-6">
               {shops.length === 0 ? (
-                <Card>
-                  <CardContent className="py-8 text-center text-muted-foreground">
-                    <p>No hay tiendas en esta ubicación</p>
-                    {isOwner && (
-                      <Button
-                        variant="outline"
-                        className="mt-4"
-                        onClick={() => router.push(`/campaigns/${campaignId}/locations/${locationId}/shops/new`)}
-                      >
-                        <Plus className="w-4 h-4 mr-2" />
-                        Crear Primera Tienda
-                      </Button>
-                    )}
-                  </CardContent>
-                </Card>
+                <EmptyState
+                  icon={Store}
+                  title="No hay tiendas"
+                  description={`Esta ubicación no tiene tiendas registradas aún. ${isOwner ? 'Crea la primera tienda para comenzar.' : ''}`}
+                >
+                  {isOwner && (
+                    <Button
+                      onClick={() => router.push(`/campaigns/${campaignId}/locations/${locationId}/shops/new`)}
+                      className="mt-4"
+                    >
+                      <Plus className="w-4 h-4 mr-2" />
+                      Crear Primera Tienda
+                    </Button>
+                  )}
+                </EmptyState>
               ) : (
-                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                <div className="grid gap-4 sm:grid-cols-1 md:grid-cols-2 xl:grid-cols-3">
                   {shops.map((shop) => (
                     <Card
                       key={shop.id}
@@ -253,15 +273,20 @@ export function LocationView({ campaignId, locationId }: LocationViewProps) {
                       onClick={() => router.push(`/campaigns/${campaignId}/locations/${locationId}/shops/${shop.id}`)}
                     >
                       <CardHeader>
-                        <CardTitle>{shop.name}</CardTitle>
+                        <CardTitle className="text-base">{shop.name}</CardTitle>
                         <CardDescription>{shop.description || "Sin descripción"}</CardDescription>
+                        {shop.shop_type && (
+                          <Badge className="mt-2 w-fit" variant="secondary">
+                            {shop.shop_type}
+                          </Badge>
+                        )}
                       </CardHeader>
                     </Card>
                   ))}
                 </div>
               )}
-            </TabsContent>
-          </Tabs>
+            </CardContent>
+          </Card>
         </>
       )}
     </div>

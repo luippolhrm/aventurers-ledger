@@ -6,7 +6,6 @@ import { WalletDisplay } from "@/components/molecules/wallet"
 import { LoadingState } from "@/components/molecules/loading"
 import { EmptyState } from "@/components/molecules/empty"
 import { useServices } from "@/hooks/use-services"
-import { useActiveCharacter } from "@/lib/active-character-context"
 import { Coins } from "lucide-react"
 import { useLanguage } from "@/lib/language-context"
 import type { WalletData } from "@/lib/infrastructure/repositories"
@@ -15,6 +14,7 @@ import type { WalletData } from "@/lib/infrastructure/repositories"
 import { Finances } from "@/components/finances"
 
 interface FinancesViewProps {
+  characterId: string
   language?: "es" // Mantener por compatibilidad, pero ya no se usa
 }
 
@@ -22,26 +22,25 @@ interface FinancesViewProps {
  * Vista refactorizada de Finances usando nuevos componentes y servicios
  * Por ahora mantiene la funcionalidad original pero con mejor arquitectura
  */
-export function FinancesView({ language }: FinancesViewProps) {
-  const { activeCharacter } = useActiveCharacter()
+export function FinancesView({ characterId, language }: FinancesViewProps) {
   const [wallet, setWallet] = useState<WalletData | null>(null)
   const [loading, setLoading] = useState(true)
   const services = useServices()
   const { t } = useLanguage()
 
   useEffect(() => {
-    if (activeCharacter) {
+    if (characterId) {
       loadWallet()
     } else {
       setLoading(false)
     }
-  }, [activeCharacter])
+  }, [characterId])
 
   const loadWallet = async () => {
-    if (!activeCharacter) return
+    if (!characterId) return
     setLoading(true)
     try {
-      const walletData = await services.wallet.getWallet(activeCharacter.id)
+      const walletData = await services.wallet.getWallet(characterId)
       setWallet(walletData)
     } catch (error) {
       console.error("Error loading wallet:", error)
@@ -54,12 +53,12 @@ export function FinancesView({ language }: FinancesViewProps) {
     return <LoadingState message="Cargando finanzas..." />
   }
 
-  if (!activeCharacter) {
+  if (!characterId) {
     return (
       <EmptyState
         icon={Coins}
-        title="No hay personaje activo"
-        description="Selecciona un personaje para ver sus finanzas"
+        title="Personaje no especificado"
+        description="Se requiere un personaje para ver sus finanzas"
       />
     )
   }

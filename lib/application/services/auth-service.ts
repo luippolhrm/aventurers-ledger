@@ -164,6 +164,21 @@ export class AuthService {
   }
 
   /**
+   * Actualiza los metadatos del usuario (como full_name)
+   * @param metadata Objeto con los metadatos a actualizar
+   * @throws AppError si hay un error
+   */
+  async updateUserMetadata(metadata: { full_name?: string }): Promise<void> {
+    const { error } = await this.supabase.auth.updateUser({
+      data: metadata,
+    })
+
+    if (error) {
+      throw ErrorService.fromSupabaseError(error)
+    }
+  }
+
+  /**
    * Obtiene la sesión actual del usuario
    * @returns Sesión actual o null si no hay sesión
    */

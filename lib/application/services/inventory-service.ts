@@ -70,7 +70,40 @@ export class InventoryService {
   async createItem(item: CreateInventoryItem): Promise<InventoryItem> {
     this.validateItemData(item)
 
-    return this.inventoryRepo.create(item)
+    // Asegurar que equippable_slot sea null al crear desde el formulario
+    const itemToCreate = {
+      ...item,
+      equippable_slot: null,
+    }
+
+    return this.inventoryRepo.create(itemToCreate)
+  }
+
+  /**
+   * Crea múltiples items individuales cuando quantity > 1
+   * Cada item se crea con quantity: 1 y equippable_slot: null
+   */
+  async createMultipleItems(item: CreateInventoryItem): Promise<InventoryItem[]> {
+    this.validateItemData(item)
+
+    if (item.quantity <= 1) {
+      // Si quantity es 1 o menos, crear un solo item
+      return [await this.createItem(item)]
+    }
+
+    // Crear múltiples items individuales
+    const items: InventoryItem[] = []
+    for (let i = 0; i < item.quantity; i++) {
+      const individualItem: CreateInventoryItem = {
+        ...item,
+        quantity: 1,
+        equippable_slot: null,
+      }
+      const created = await this.createItem(individualItem)
+      items.push(created)
+    }
+
+    return items
   }
 
   /**
@@ -119,6 +152,25 @@ export class InventoryService {
         ErrorCode.VALIDATION_ERROR,
         "Cannot equip item that is stored in a container"
       )
+    }
+
+    // Validar attunement: máximo 3 items attuned equipados
+    if (item.attunement) {
+      const equippedItems = await this.getInventory(item.character_id)
+      const attunedEquippedCount = equippedItems.filter(
+        (i) => i.equipped && i.attunement === true
+      ).length
+
+      // Si el item actual ya está equipado, no contarlo
+      const currentItemEquipped = item.equipped
+      const adjustedCount = currentItemEquipped ? attunedEquippedCount - 1 : attunedEquippedCount
+
+      if (adjustedCount >= 3) {
+        throw ErrorService.create(
+          ErrorCode.VALIDATION_ERROR,
+          "Cannot equip more than 3 attuned items. Please unequip an attuned item first."
+        )
+      }
     }
 
     // Desequipar cualquier item que esté en ese slot
@@ -209,6 +261,55 @@ export class InventoryService {
     }
 
     return this.inventoryRepo.removeFromContainer(itemId)
+  }
+
+  /**
+   * Cambia el modo de uso de un arma versátil (1 o 2 manos)
+   */
+  async setVersatileUsage(
+    itemId: string,
+    usage: "one-handed" | "two-handed"
+  ): Promise<InventoryItem> {
+    const item = await this.getItem(itemId)
+
+    // Validar que es un arma
+    if (item.item_category !== "weapon") {
+      throw ErrorService.create(
+        ErrorCode.VALIDATION_ERROR,
+        "Item is not a weapon"
+      )
+    }
+
+    // Validar que es un arma versátil
+    if (!item.properties?.includes("versatile")) {
+      throw ErrorService.create(
+        ErrorCode.VALIDATION_ERROR,
+        "Weapon is not versatile"
+      )
+    }
+
+    // Validar que está equipada
+    if (!item.equipped || item.equipped_slot !== "weapon_main") {
+      throw ErrorService.create(
+        ErrorCode.VALIDATION_ERROR,
+        "Weapon must be equipped in weapon_main slot"
+      )
+    }
+
+    // Si se cambia a two-handed, validar que weapon_off esté vacío
+    if (usage === "two-handed") {
+      const equippedItems = await this.getInventory(item.character_id)
+      const weaponOff = equippedItems.find((i) => i.equipped_slot === "weapon_off")
+      
+      if (weaponOff) {
+        throw ErrorService.create(
+          ErrorCode.VALIDATION_ERROR,
+          "Cannot use weapon two-handed while weapon_off is occupied"
+        )
+      }
+    }
+
+    return this.inventoryRepo.update(itemId, { versatile_usage: usage })
   }
 
   /**

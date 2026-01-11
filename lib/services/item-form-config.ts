@@ -99,6 +99,48 @@ export class ItemFormConfigService {
               { value: "force", label: "Fuerza" },
             ],
           },
+          {
+            id: "weapon_mastery",
+            label: "Maestría de Arma (D&D 2024)",
+            type: "select",
+            options: [
+              { value: "cleave", label: "Cleave (Cortar)" },
+              { value: "graze", label: "Graze (Rozar)" },
+              { value: "nick", label: "Nick (Cortar Rápido)" },
+              { value: "push", label: "Push (Empujar)" },
+              { value: "sap", label: "Sap (Aturdir)" },
+              { value: "slow", label: "Slow (Ralentizar)" },
+              { value: "topple", label: "Topple (Derribar)" },
+              { value: "vex", label: "Vex (Molestar)" },
+            ],
+            helpText: "Propiedad de maestría del arma según D&D 2024",
+          },
+          {
+            id: "weapon_range_normal",
+            label: "Alcance Normal (pies)",
+            type: "number",
+            min: 0,
+            placeholder: "e.g., 30, 80",
+            helpText: "Alcance normal en pies (solo para armas ranged/thrown)",
+            conditional: (formData: any) => {
+              // Solo mostrar si tiene propiedades ranged o thrown
+              const properties = formData.properties || []
+              return Array.isArray(properties) && (properties.includes("ranged") || properties.includes("thrown"))
+            },
+          },
+          {
+            id: "weapon_range_long",
+            label: "Alcance Largo (pies)",
+            type: "number",
+            min: 0,
+            placeholder: "e.g., 120, 320",
+            helpText: "Alcance largo en pies (solo para armas ranged)",
+            conditional: (formData: any) => {
+              // Solo mostrar si tiene propiedad ranged
+              const properties = formData.properties || []
+              return Array.isArray(properties) && properties.includes("ranged")
+            },
+          },
         ],
       },
     ],
@@ -145,16 +187,7 @@ export class ItemFormConfigService {
               { value: "other", label: "Otro" },
             ],
           },
-          {
-            id: "effect_target",
-            label: "Objetivo",
-            type: "select",
-            options: [
-              { value: "self", label: "Uno mismo" },
-              { value: "other", label: "Otro objetivo" },
-              { value: "area", label: "Área" },
-            ],
-          },
+          // effect_target removido - los detalles de uso van en la descripción
         ],
       },
     ],
@@ -249,9 +282,21 @@ export class ItemFormConfigService {
     ],
   ])
 
-  static getFieldsForCategory(category: ItemCategory): FieldConfig[] {
+  static getFieldsForCategory(category: ItemCategory, formData?: any): FieldConfig[] {
     const config = this.categoryConfigs.get(category)
-    return config?.fields || []
+    if (!config) return []
+
+    // Filtrar campos basándose en condiciones si se proporciona formData
+    if (formData) {
+      return config.fields.filter((field) => {
+        if (field.conditional) {
+          return field.conditional(formData)
+        }
+        return true
+      })
+    }
+
+    return config.fields
   }
 
   static getAvailableSlots(category: ItemCategory, itemType?: string, wondrousType?: string): string[] {
@@ -313,6 +358,36 @@ export class ItemFormConfigService {
 
   static getCategoryConfig(category: ItemCategory): CategoryConfig | undefined {
     return this.categoryConfigs.get(category)
+  }
+
+  /**
+   * Mapea un item_type a las categorías disponibles para ese tipo
+   * @param itemType Tipo de item (weapon, armor, equipment, consumable, treasure, other)
+   * @returns Array de categorías válidas para ese tipo
+   */
+  static mapTypeToCategory(itemType: string): ItemCategory[] {
+    const typeMapping: Record<string, ItemCategory[]> = {
+      weapon: ["weapon"],
+      armor: ["armor"],
+      equipment: ["equipment", "tool", "gear", "wondrous"],
+      consumable: ["consumable", "potion"],
+      treasure: ["treasure"],
+      other: ["other", "scroll"],
+    }
+
+    return typeMapping[itemType] || this.getAllCategories()
+  }
+
+  /**
+   * Obtiene las categorías disponibles para un tipo de item específico
+   * @param itemType Tipo de item seleccionado
+   * @returns Array de categorías filtradas
+   */
+  static getCategoriesForType(itemType: string): ItemCategory[] {
+    if (!itemType) {
+      return []
+    }
+    return this.mapTypeToCategory(itemType)
   }
 }
 

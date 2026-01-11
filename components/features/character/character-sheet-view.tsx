@@ -9,10 +9,11 @@ import { useServices } from "@/hooks/use-services"
 import { LoadingState } from "@/components/molecules/loading"
 import { EmptyState } from "@/components/molecules/empty"
 import { CarryingCapacityDisplay } from "@/components/molecules/character-sheet"
-import { CharacterSheetConfigService } from "@/lib/services/character-sheet-config"
+import { CharacterSheetConfigService } from "@/lib/application/services/character-sheet-config-service"
+import { CharacterNotesPanel } from "./character-notes-panel"
 import type { Character } from "@/lib/infrastructure/repositories/character-repository"
 import { useLanguage } from "@/lib/language-context"
-import { ArrowLeft, User, Activity, Book, FileText, Edit, MapPin } from "lucide-react"
+import { ArrowLeft, User, Activity, Book, Edit, MapPin } from "lucide-react"
 
 interface CharacterSheetViewProps {
   characterId: string
@@ -246,19 +247,7 @@ export function CharacterSheetView({ characterId, language, editable = false }: 
       )}
 
       {/* Notas */}
-      {character.preparation_notes && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <FileText className="w-5 h-5" />
-              {t.character.sections?.notes || "Notas"}
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-sm whitespace-pre-wrap">{character.preparation_notes}</p>
-          </CardContent>
-        </Card>
-      )}
+      <CharacterNotesPanel characterId={characterId} character={character} />
     </div>
   )
 }

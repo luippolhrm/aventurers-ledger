@@ -351,6 +351,15 @@ export class SupabaseInventoryRepository implements InventoryRepository {
       damage_dice: data.damage_dice || null,
       damage_type: data.damage_type || null,
       armor_class: data.armor_class ? Number(data.armor_class) : null,
+      // Weapon properties (D&D 2024)
+      weapon_mastery: data.weapon_mastery || null,
+      properties: data.properties || null,
+      damage_dice_versatile: data.damage_dice_versatile || null,
+      versatile_usage: (data.versatile_usage === "one-handed" || data.versatile_usage === "two-handed") ? data.versatile_usage : null,
+      weapon_range_normal: data.weapon_range_normal ? Number(data.weapon_range_normal) : null,
+      weapon_range_long: data.weapon_range_long ? Number(data.weapon_range_long) : null,
+      // Attunement
+      attunement: data.attunement ?? null,
       created_at: data.created_at,
       updated_at: data.updated_at || null,
     }

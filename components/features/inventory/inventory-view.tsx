@@ -108,11 +108,20 @@ export function InventoryView({ language, characterId, campaignId }: InventoryVi
           description: t.inventory.itemUpdated,
         })
       } else {
-        await services.inventory.createItem(itemData)
-        toast({
-          title: t.inventory.success,
-          description: t.inventory.itemAdded,
-        })
+        // Si quantity > 1, crear múltiples items individuales
+        if (itemData.quantity > 1) {
+          const createdItems = await services.inventory.createMultipleItems(itemData)
+          toast({
+            title: t.inventory.success,
+            description: `${createdItems.length} ${t.inventory.itemsCreated || "items creados"}`,
+          })
+        } else {
+          await services.inventory.createItem(itemData)
+          toast({
+            title: t.inventory.success,
+            description: t.inventory.itemAdded,
+          })
+        }
       }
 
       loadInventory()

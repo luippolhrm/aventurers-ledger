@@ -66,5 +66,11 @@ export interface InventoryFormData {
   damage_dice: string | null
   damage_type: string | null
   armor_class: number | null
+  weapon_mastery: string | null
+  weapon_range_normal: number | null
+  weapon_range_long: number | null
+  properties: string[] | null
+  // Attunement
+  attunement: boolean | null
 }
 

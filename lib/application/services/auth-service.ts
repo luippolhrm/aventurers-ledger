@@ -1,5 +1,5 @@
 import { createBrowserClient } from "@/lib/supabase/client"
-import type { SupabaseClient } from "@supabase/supabase-js"
+import type { SupabaseClient, AuthApiError } from "@supabase/supabase-js"
 import { ErrorService, ErrorCode } from "@/lib/infrastructure/errors"
 import { ValidationUtils } from "../utils/validation"
 
@@ -32,19 +32,20 @@ export class AuthService {
    * @throws AppError si hay un error de validación o infraestructura
    */
   async signUp(data: SignUpData): Promise<{ user: any; session: any }> {
-    ValidationUtils.validateNonEmptyString(data.email, "Email")
+    // Validar email con formato correcto
+    ValidationUtils.validateEmail(data.email, "Email")
     ValidationUtils.validateNonEmptyString(data.password, "Password")
     ValidationUtils.validateNonEmptyString(data.displayName, "Display name")
 
     if (data.password.length < 6) {
       throw ErrorService.create(
-        ErrorCode.VALIDATION_ERROR,
-        "Password must be at least 6 characters"
+        ErrorCode.WEAK_PASSWORD,
+        "La contraseña debe tener al menos 6 caracteres"
       )
     }
 
     const { data: authData, error } = await this.supabase.auth.signUp({
-      email: data.email,
+      email: data.email.trim(),
       password: data.password,
       options: {
         emailRedirectTo:
@@ -57,11 +58,12 @@ export class AuthService {
     })
 
     if (error) {
-      throw ErrorService.fromSupabaseError(error)
+      // Usar fromAuthError para errores de autenticación
+      throw ErrorService.fromAuthError(error as AuthApiError)
     }
 
     if (!authData.user) {
-      throw ErrorService.create(ErrorCode.VALIDATION_ERROR, "Failed to create user")
+      throw ErrorService.create(ErrorCode.VALIDATION_ERROR, "No se pudo crear el usuario")
     }
 
     // El perfil se crea automáticamente mediante trigger
@@ -80,20 +82,22 @@ export class AuthService {
    * @throws AppError si hay un error de validación o infraestructura
    */
   async signIn(data: SignInData): Promise<{ user: any; session: any }> {
-    ValidationUtils.validateNonEmptyString(data.email, "Email")
+    // Validar email con formato correcto
+    ValidationUtils.validateEmail(data.email, "Email")
     ValidationUtils.validateNonEmptyString(data.password, "Password")
 
     const { data: authData, error } = await this.supabase.auth.signInWithPassword({
-      email: data.email,
+      email: data.email.trim(),
       password: data.password,
     })
 
     if (error) {
-      throw ErrorService.fromSupabaseError(error)
+      // Usar fromAuthError para errores de autenticación
+      throw ErrorService.fromAuthError(error as AuthApiError)
     }
 
     if (!authData.user || !authData.session) {
-      throw ErrorService.create(ErrorCode.UNAUTHORIZED, "Invalid credentials")
+      throw ErrorService.create(ErrorCode.INVALID_CREDENTIALS, "Credenciales inválidas")
     }
 
     return {
@@ -123,7 +127,8 @@ export class AuthService {
     })
 
     if (error) {
-      throw ErrorService.fromSupabaseError(error)
+      // Usar fromAuthError para errores de autenticación
+      throw ErrorService.fromAuthError(error as AuthApiError)
     }
   }
 
@@ -149,8 +154,8 @@ export class AuthService {
 
     if (newPassword.length < 6) {
       throw ErrorService.create(
-        ErrorCode.VALIDATION_ERROR,
-        "Password must be at least 6 characters"
+        ErrorCode.WEAK_PASSWORD,
+        "La contraseña debe tener al menos 6 caracteres"
       )
     }
 
@@ -159,7 +164,8 @@ export class AuthService {
     })
 
     if (error) {
-      throw ErrorService.fromSupabaseError(error)
+      // Usar fromAuthError para errores de autenticación
+      throw ErrorService.fromAuthError(error as AuthApiError)
     }
   }
 

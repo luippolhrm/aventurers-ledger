@@ -11,7 +11,8 @@ import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useState, useMemo } from "react"
 import { useLanguage } from "@/lib/language-context"
-import { ErrorService } from "@/lib/infrastructure/errors"
+import { ErrorService, AppError } from "@/lib/infrastructure/errors"
+import { ValidationUtils } from "@/lib/application/utils/validation"
 
 export default function SignUpPage() {
   const [email, setEmail] = useState("")
@@ -29,8 +30,22 @@ export default function SignUpPage() {
     setIsLoading(true)
     setError(null)
 
+    // Validación de contraseñas coincidentes
     if (password !== repeatPassword) {
       setError(t.auth.passwordMismatch)
+      setIsLoading(false)
+      return
+    }
+
+    // Validación de email en el frontend (validación adicional)
+    try {
+      ValidationUtils.validateEmail(email, "Email")
+    } catch (emailError) {
+      if (emailError instanceof AppError) {
+        setError(emailError.message)
+      } else {
+        setError("El correo electrónico no es válido")
+      }
       setIsLoading(false)
       return
     }
@@ -46,10 +61,16 @@ export default function SignUpPage() {
 
       router.push("/auth/sign-up-success")
     } catch (error: unknown) {
-      const errorMessage =
-        error instanceof Error
-          ? error.message
-          : ErrorService.fromUnknownError(error).message
+      // Manejar errores de forma más específica
+      let errorMessage: string
+      
+      if (error instanceof AppError) {
+        errorMessage = error.message
+      } else {
+        const appError = ErrorService.fromUnknownError(error)
+        errorMessage = appError.message
+      }
+      
       setError(errorMessage || t.auth.signUpError)
     } finally {
       setIsLoading(false)
@@ -64,10 +85,16 @@ export default function SignUpPage() {
       await authService.signInWithOAuth("google")
       // El redirect se maneja automáticamente por OAuth
     } catch (error: unknown) {
-      const errorMessage =
-        error instanceof Error
-          ? error.message
-          : ErrorService.fromUnknownError(error).message
+      // Manejar errores de forma más específica
+      let errorMessage: string
+      
+      if (error instanceof AppError) {
+        errorMessage = error.message
+      } else {
+        const appError = ErrorService.fromUnknownError(error)
+        errorMessage = appError.message
+      }
+      
       setError(errorMessage || t.auth.signUpError)
       setIsLoading(false)
     }
@@ -171,7 +198,29 @@ export default function SignUpPage() {
               className="border-amber-400 bg-white/60 focus:border-amber-600"
             />
           </div>
-          {error && <p className="text-sm text-amber-700 font-semibold">{error}</p>}
+          {error && (
+            <div className="rounded-md bg-red-50 border border-red-200 p-3">
+              <div className="flex">
+                <div className="flex-shrink-0">
+                  <svg
+                    className="h-5 w-5 text-red-400"
+                    viewBox="0 0 20 20"
+                    fill="currentColor"
+                    aria-hidden="true"
+                  >
+                    <path
+                      fillRule="evenodd"
+                      d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.28 7.22a.75.75 0 00-1.06 1.06L8.94 10l-1.72 1.72a.75.75 0 101.06 1.06L10 11.06l1.72 1.72a.75.75 0 101.06-1.06L11.06 10l1.72-1.72a.75.75 0 00-1.06-1.06L10 8.94 8.28 7.22z"
+                      clipRule="evenodd"
+                    />
+                  </svg>
+                </div>
+                <div className="ml-3">
+                  <p className="text-sm font-medium text-red-800">{error}</p>
+                </div>
+              </div>
+            </div>
+          )}
           <Button
             type="submit"
             className="w-full bg-amber-700 hover:bg-amber-800 text-white font-semibold"

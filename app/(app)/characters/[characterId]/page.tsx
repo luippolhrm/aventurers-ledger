@@ -124,7 +124,7 @@ export default function CharacterPage({ params }: { params: Promise<{ characterI
           title="Historia"
           description="Backstory y notas"
           icon={Book}
-          onClick={() => router.push(`/characters/${characterId}/story`)}
+          onClick={() => router.push(`/characters/${characterId}/history`)}
         />
 
         <NavigationCard

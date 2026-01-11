@@ -1,6 +1,6 @@
 import { ErrorCode } from "./error-codes"
 import { AppError } from "./app-error"
-import type { PostgrestError } from "@supabase/supabase-js"
+import type { PostgrestError, AuthApiError } from "@supabase/supabase-js"
 
 /**
  * Servicio centralizado para manejo de errores
@@ -43,6 +43,14 @@ export class ErrorService {
     // Transfer
     [ErrorCode.TRANSFER_FAILED]: "Error al transferir fondos",
     [ErrorCode.INVALID_TRANSFER_AMOUNT]: "Cantidad de transferencia inválida",
+
+    // Auth
+    [ErrorCode.INVALID_EMAIL]: "El correo electrónico no es válido",
+    [ErrorCode.INVALID_CREDENTIALS]: "Correo o contraseña incorrectos",
+    [ErrorCode.INVALID_PASSWORD]: "La contraseña es incorrecta",
+    [ErrorCode.EMAIL_ALREADY_EXISTS]: "Este correo electrónico ya está registrado",
+    [ErrorCode.EMAIL_NOT_VERIFIED]: "Por favor verifica tu correo electrónico",
+    [ErrorCode.WEAK_PASSWORD]: "La contraseña es muy débil",
 
     // Generic
     [ErrorCode.VALIDATION_ERROR]: "Error de validación",
@@ -134,12 +142,79 @@ export class ErrorService {
   }
 
   /**
+   * Mapea errores de autenticación de Supabase a AppError
+   * Convierte errores de AuthApiError a errores de aplicación estandarizados
+   */
+  static fromAuthError(error: AuthApiError | null | undefined): AppError {
+    if (!error) {
+      return this.create(ErrorCode.UNKNOWN_ERROR, "Error desconocido")
+    }
+
+    const errorMessage = error.message?.toLowerCase() || ""
+    const status = error.status || 0
+
+    // Errores de credenciales inválidas (400)
+    if (status === 400) {
+      if (
+        errorMessage.includes("invalid login credentials") ||
+        errorMessage.includes("invalid credentials") ||
+        errorMessage.includes("email not confirmed") ||
+        errorMessage.includes("incorrect email or password")
+      ) {
+        return this.create(ErrorCode.INVALID_CREDENTIALS, "Correo o contraseña incorrectos", error)
+      }
+
+      if (errorMessage.includes("password")) {
+        return this.create(ErrorCode.INVALID_PASSWORD, "La contraseña es incorrecta", error)
+      }
+
+      if (errorMessage.includes("email")) {
+        return this.create(ErrorCode.INVALID_EMAIL, "El correo electrónico no es válido", error)
+      }
+
+      if (errorMessage.includes("weak password") || errorMessage.includes("password is too weak")) {
+        return this.create(ErrorCode.WEAK_PASSWORD, "La contraseña es muy débil. Debe tener al menos 6 caracteres", error)
+      }
+    }
+
+    // Error de email ya existe (422 o 400)
+    if (
+      status === 422 ||
+      (status === 400 && (errorMessage.includes("already registered") || errorMessage.includes("user already exists")))
+    ) {
+      return this.create(ErrorCode.EMAIL_ALREADY_EXISTS, "Este correo electrónico ya está registrado", error)
+    }
+
+    // Error de email no verificado
+    if (errorMessage.includes("email not confirmed") || errorMessage.includes("email not verified")) {
+      return this.create(ErrorCode.EMAIL_NOT_VERIFIED, "Por favor verifica tu correo electrónico antes de iniciar sesión", error)
+    }
+
+    // Error de formato de email inválido
+    if (errorMessage.includes("invalid email") || errorMessage.includes("email format")) {
+      return this.create(ErrorCode.INVALID_EMAIL, "El formato del correo electrónico no es válido", error)
+    }
+
+    // Para otros errores de auth, usar el mensaje original o genérico
+    const message = error.message || "Error de autenticación"
+    return this.create(ErrorCode.UNAUTHORIZED, message, error)
+  }
+
+  /**
    * Convierte cualquier error a AppError
    * Útil para manejar errores inesperados
    */
   static fromUnknownError(error: unknown): AppError {
     if (error instanceof AppError) {
       return error
+    }
+
+    // Intentar manejar AuthApiError
+    if (error && typeof error === "object" && "status" in error && "message" in error) {
+      const authError = error as AuthApiError
+      if (authError.status && authError.message) {
+        return this.fromAuthError(authError)
+      }
     }
 
     if (error instanceof Error) {

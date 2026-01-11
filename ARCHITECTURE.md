@@ -125,6 +125,152 @@ export function MyComponent() {
 
 ---
 
+## Estructura de Páginas y Navegación (Next.js App Router)
+
+### ⚠️ Regla Estricta: NO usar Tabs para Navegación
+
+**❌ PROHIBIDO:** Usar componentes `<Tabs>` para navegar entre features principales.
+
+**✅ OBLIGATORIO:** Cada feature principal debe ser una página separada en Next.js App Router.
+
+**Razones:**
+1. **Mejora la navegabilidad**: URLs compartibles, botón atrás funciona correctamente
+2. **Facilita el mantenimiento**: Código más claro y separado por responsabilidades
+3. **Permite deep linking**: Puedes llamar sitios desde otros con URLs específicas
+4. **Mejor UX**: El usuario puede marcar páginas específicas, compartir enlaces directos
+
+### Estructura de Rutas
+
+**Ubicación:** `app/(app)/`
+
+Cada feature principal debe tener su propia ruta:
+
+```
+app/(app)/
+├── dashboard/
+│   └── page.tsx              # Dashboard principal
+├── characters/
+│   └── [characterId]/
+│       ├── page.tsx          # Overview del personaje
+│       ├── inventory/
+│       │   ├── page.tsx      # Lista de items
+│       │   ├── add/
+│       │   │   └── page.tsx  # Agregar item
+│       │   └── equipped/
+│       │       └── page.tsx  # Vista equipado
+│       ├── wallet/
+│       │   └── page.tsx      # Monedero
+│       ├── movements/
+│       │   └── page.tsx      # Movimientos
+│       └── sheet/
+│           └── page.tsx      # Hoja de personaje
+└── campaigns/
+    └── [campaignId]/
+        ├── page.tsx          # Overview de campaña
+        ├── characters/
+        │   └── [characterId]/
+        │       ├── page.tsx  # Overview del personaje en campaña
+        │       ├── wallet/
+        │       │   └── page.tsx
+        │       ├── inventory/
+        │       │   └── page.tsx
+        │       └── movements/
+        │           └── page.tsx
+        ├── locations/
+        │   └── page.tsx
+        └── npcs/
+            └── page.tsx
+```
+
+### Navegación
+
+**Usar `<Link>` de Next.js para navegación:**
+```typescript
+import Link from "next/link"
+
+<Link href={`/campaigns/${campaignId}/characters/${characterId}/wallet`}>
+  Ver Monedero
+</Link>
+```
+
+**Usar `router.push()` para navegación programática:**
+```typescript
+import { useRouter } from "next/navigation"
+
+const router = useRouter()
+router.push(`/campaigns/${campaignId}/characters/${characterId}/inventory`)
+```
+
+**❌ NO usar estado local para cambiar vistas:**
+```typescript
+// ❌ INCORRECTO
+const [activeTab, setActiveTab] = useState("wallet")
+{activeTab === "wallet" && <WalletView />}
+
+// ✅ CORRECTO
+// Cada vista es una página separada con su propia ruta
+```
+
+### Relación entre Features y Páginas
+
+- **`components/features/`**: Componentes reutilizables de features
+- **`app/(app)/.../page.tsx`**: Páginas que usan esos componentes
+
+**Ejemplo:**
+```typescript
+// app/(app)/campaigns/[campaignId]/characters/[characterId]/wallet/page.tsx
+import { WalletView } from "@/components/features/wallet"
+
+export default function WalletPage({ params }: { params: Promise<{ campaignId: string, characterId: string }> }) {
+  const { campaignId, characterId } = await params
+  return <WalletView characterId={characterId} campaignId={campaignId} />
+}
+```
+
+---
+
+## Hooks Personalizados para Features
+
+### Patrón de Hooks para Features
+
+Cuando un feature tiene lógica compleja compartida entre múltiples componentes, crear un hook personalizado.
+
+**Ubicación:** `components/features/[feature]/use-[feature]-data.tsx`
+
+**Ejemplo:**
+```typescript
+// components/features/inventory/use-inventory-data.tsx
+export function useInventoryData(characterId: string) {
+  const services = useServices()
+  // Estado, handlers, funciones helper
+  return { items, handleAdd, handleEquip, ... }
+}
+```
+
+**Uso en componentes:**
+```typescript
+// En cualquier componente del feature
+import { useInventoryData } from "@/components/features/inventory"
+
+const { items, handleAdd } = useInventoryData(characterId)
+```
+
+**Reglas:**
+- ✅ Un hook por feature complejo
+- ✅ Encapsula toda la lógica de negocio del feature
+- ✅ Expone solo lo necesario a los componentes
+- ✅ Usa `useServices()` internamente para acceder a servicios
+- ❌ NO duplicar lógica en componentes individuales
+- ❌ NO debe tener lógica de negocio (debe delegar a servicios)
+
+**Beneficios:**
+- Reutilización de lógica entre componentes del mismo feature
+- Evita duplicación de código
+- Facilita testing y mantenimiento
+- Consistencia en el comportamiento del feature
+
+---
+
 ## Flujo de Datos Simplificado
 
 ```
@@ -340,4 +486,4 @@ Vistas completas de features que combinan organisms, molecules y atoms.
 ---
 
 **Última actualización:** 2025-01-16  
-**Versión:** 2.0.0 (Simplificada)
+**Versión:** 2.1.0 (Con estructura de páginas y hooks)

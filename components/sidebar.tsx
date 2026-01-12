@@ -1,7 +1,7 @@
 "use client"
 
 import { cn } from "@/lib/utils"
-import { Coins, Menu, X, Users, Home, Map, Settings, User, LogOut } from "lucide-react"
+import { Menu, X, Users, Home, Map, Settings, User, LogOut } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useState } from "react"
 import { useLanguage } from "@/lib/language-context"
@@ -32,7 +32,6 @@ export function Sidebar({ includeProfileSettings = false }: SidebarProps) {
   const getActiveModule = () => {
     if (pathname?.includes("/characters")) return "characters"
     if (pathname?.includes("/campaigns")) return "campaigns"
-    if (pathname?.includes("/currency")) return "currency-converter"
     if (pathname?.includes("/profile")) return "profile"
     if (pathname?.includes("/settings")) return "settings"
     return "welcome"
@@ -58,12 +57,6 @@ export function Sidebar({ includeProfileSettings = false }: SidebarProps) {
       name: "Campañas",
       icon: Map,
       path: "/campaigns",
-    },
-    {
-      id: "currency-converter",
-      name: "Conversor de Monedas",
-      icon: Coins,
-      path: "/currency-converter",
     },
   ]
 

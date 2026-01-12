@@ -21,7 +21,7 @@ import { WalletService } from "./wallet-service"
 import { DungeonService } from "./dungeon-service"
 import { LocationService } from "./location-service"
 import { ErrorService, ErrorCode } from "@/lib/infrastructure/errors"
-import { ValidationUtils } from "../utils/validation"
+import { ValidationUtils, PermissionUtils } from "../utils"
 
 /**
  * Servicio de aplicación para gestión de NPCs
@@ -68,11 +68,8 @@ export class NpcService {
     ValidationUtils.validateId(npc.campaign_id, "Campaign ID")
     ValidationUtils.validateNonEmptyString(npc.name, "NPC name")
 
-    // Verificar que el usuario es GM de la campaña
-    const isGM = await this.campaignService.isGameMaster(userId, npc.campaign_id)
-    if (!isGM) {
-      throw ErrorService.create(ErrorCode.FORBIDDEN, "Only Game Masters can create NPCs")
-    }
+    // Verificar que el usuario es GM de la campaña usando helper centralizado
+    await PermissionUtils.ensureGameMaster(userId, npc.campaign_id)
 
     return this.npcRepo.create(npc)
   }
@@ -87,11 +84,8 @@ export class NpcService {
     // Obtener el NPC para verificar la campaña
     const npc = await this.getNpc(npcId)
 
-    // Verificar que el usuario es GM de la campaña
-    const isGM = await this.campaignService.isGameMaster(userId, npc.campaign_id)
-    if (!isGM) {
-      throw ErrorService.create(ErrorCode.FORBIDDEN, "Only Game Masters can update NPCs")
-    }
+    // Verificar que el usuario es GM de la campaña usando helper centralizado
+    await PermissionUtils.ensureGameMaster(userId, npc.campaign_id)
 
     return this.npcRepo.update(npcId, updates)
   }
@@ -106,11 +100,8 @@ export class NpcService {
     // Obtener el NPC para verificar la campaña
     const npc = await this.getNpc(npcId)
 
-    // Verificar que el usuario es GM de la campaña
-    const isGM = await this.campaignService.isGameMaster(userId, npc.campaign_id)
-    if (!isGM) {
-      throw ErrorService.create(ErrorCode.FORBIDDEN, "Only Game Masters can delete NPCs")
-    }
+    // Verificar que el usuario es GM de la campaña usando helper centralizado
+    await PermissionUtils.ensureGameMaster(userId, npc.campaign_id)
 
     return this.npcRepo.delete(npcId)
   }
@@ -142,11 +133,8 @@ export class NpcService {
     // Obtener el NPC para verificar la campaña
     const npc = await this.getNpc(npcId)
 
-    // Verificar que el usuario es GM de la campaña
-    const isGM = await this.campaignService.isGameMaster(userId, npc.campaign_id)
-    if (!isGM) {
-      throw ErrorService.create(ErrorCode.FORBIDDEN, "Only Game Masters can associate NPCs to shops")
-    }
+    // Verificar que el usuario es GM de la campaña usando helper centralizado
+    await PermissionUtils.ensureGameMaster(userId, npc.campaign_id)
 
     // Crear la asociación usando Supabase directamente
     const { createBrowserClient } = await import("@/lib/supabase/client")
@@ -172,11 +160,8 @@ export class NpcService {
     // Obtener el NPC para verificar la campaña
     const npc = await this.getNpc(npcId)
 
-    // Verificar que el usuario es GM de la campaña
-    const isGM = await this.campaignService.isGameMaster(userId, npc.campaign_id)
-    if (!isGM) {
-      throw ErrorService.create(ErrorCode.FORBIDDEN, "Only Game Masters can disassociate NPCs from shops")
-    }
+    // Verificar que el usuario es GM de la campaña usando helper centralizado
+    await PermissionUtils.ensureGameMaster(userId, npc.campaign_id)
 
     // Eliminar la asociación usando Supabase directamente
     const { createBrowserClient } = await import("@/lib/supabase/client")
@@ -332,11 +317,8 @@ export class NpcService {
     // Obtener el NPC para verificar la campaña
     const npc = await this.getNpc(npcId)
 
-    // Verificar que el usuario es GM de la campaña
-    const isGM = await this.campaignService.isGameMaster(userId, npc.campaign_id)
-    if (!isGM) {
-      throw ErrorService.create(ErrorCode.FORBIDDEN, "Only Game Masters can add items to NPC inventory")
-    }
+    // Verificar que el usuario es GM de la campaña usando helper centralizado
+    await PermissionUtils.ensureGameMaster(userId, npc.campaign_id)
 
     return this.npcInventoryRepo.create(item)
   }
@@ -357,11 +339,8 @@ export class NpcService {
     // Obtener el NPC para verificar la campaña
     const npc = await this.getNpc(item.npc_id)
 
-    // Verificar que el usuario es GM de la campaña
-    const isGM = await this.campaignService.isGameMaster(userId, npc.campaign_id)
-    if (!isGM) {
-      throw ErrorService.create(ErrorCode.FORBIDDEN, "Only Game Masters can update NPC inventory items")
-    }
+    // Verificar que el usuario es GM de la campaña usando helper centralizado
+    await PermissionUtils.ensureGameMaster(userId, npc.campaign_id)
 
     // Validar campos si están presentes
     if (updates.quantity !== undefined) {
@@ -396,11 +375,8 @@ export class NpcService {
     // Obtener el NPC para verificar la campaña
     const npc = await this.getNpc(item.npc_id)
 
-    // Verificar que el usuario es GM de la campaña
-    const isGM = await this.campaignService.isGameMaster(userId, npc.campaign_id)
-    if (!isGM) {
-      throw ErrorService.create(ErrorCode.FORBIDDEN, "Only Game Masters can remove items from NPC inventory")
-    }
+    // Verificar que el usuario es GM de la campaña usando helper centralizado
+    await PermissionUtils.ensureGameMaster(userId, npc.campaign_id)
 
     return this.npcInventoryRepo.delete(itemId)
   }
@@ -441,7 +417,7 @@ export class NpcService {
     const npc = await this.getNpc(npcId)
 
     // Verificar que el usuario es GM de la campaña o tiene acceso al personaje
-    const isGM = await this.campaignService.isGameMaster(userId, npc.campaign_id)
+    const isGM = await PermissionUtils.isGameMaster(userId, npc.campaign_id)
     // TODO: Agregar validación de acceso al personaje si es necesario
 
     // Crear el item en el inventario del personaje
@@ -514,11 +490,8 @@ export class NpcService {
     // Obtener el NPC para verificar la campaña
     const npc = await this.getNpc(npcId)
 
-    // Verificar que el usuario es GM de la campaña
-    const isGM = await this.campaignService.isGameMaster(userId, npc.campaign_id)
-    if (!isGM) {
-      throw ErrorService.create(ErrorCode.FORBIDDEN, "Only Game Masters can distribute currency from NPCs")
-    }
+    // Verificar que el usuario es GM de la campaña usando helper centralizado
+    await PermissionUtils.ensureGameMaster(userId, npc.campaign_id)
 
     // Obtener el wallet del personaje
     const wallet = await this.walletService.getWallet(characterId)

@@ -13,7 +13,7 @@ import {
 import { CampaignService } from "./campaign-service"
 import { LocationService } from "./location-service"
 import { ErrorService, ErrorCode } from "@/lib/infrastructure/errors"
-import { ValidationUtils } from "../utils/validation"
+import { ValidationUtils, PermissionUtils } from "../utils"
 
 /**
  * Servicio de aplicación para gestión de dungeons
@@ -57,11 +57,8 @@ export class DungeonService {
       )
     }
 
-    // Verificar que el usuario es GM de la campaña
-    const isGM = await this.campaignService.isGameMaster(userId, location.campaign_id)
-    if (!isGM) {
-      throw ErrorService.create(ErrorCode.FORBIDDEN, "Only Game Masters can create dungeons")
-    }
+    // Verificar que el usuario es GM de la campaña usando helper centralizado
+    await PermissionUtils.ensureGameMaster(userId, location.campaign_id)
 
     return this.dungeonRepo.create(dungeon)
   }
@@ -82,11 +79,8 @@ export class DungeonService {
     // Obtener la location para verificar la campaña
     const location = await this.locationService.getLocation(dungeon.location_id)
 
-    // Verificar que el usuario es GM de la campaña
-    const isGM = await this.campaignService.isGameMaster(userId, location.campaign_id)
-    if (!isGM) {
-      throw ErrorService.create(ErrorCode.FORBIDDEN, "Only Game Masters can update dungeons")
-    }
+    // Verificar que el usuario es GM de la campaña usando helper centralizado
+    await PermissionUtils.ensureGameMaster(userId, location.campaign_id)
 
     return this.dungeonRepo.update(dungeonId, updates)
   }
@@ -107,11 +101,8 @@ export class DungeonService {
     // Obtener la location para verificar la campaña
     const location = await this.locationService.getLocation(dungeon.location_id)
 
-    // Verificar que el usuario es GM de la campaña
-    const isGM = await this.campaignService.isGameMaster(userId, location.campaign_id)
-    if (!isGM) {
-      throw ErrorService.create(ErrorCode.FORBIDDEN, "Only Game Masters can delete dungeons")
-    }
+    // Verificar que el usuario es GM de la campaña usando helper centralizado
+    await PermissionUtils.ensureGameMaster(userId, location.campaign_id)
 
     return this.dungeonRepo.delete(dungeonId)
   }
@@ -159,11 +150,8 @@ export class DungeonService {
     // Obtener la location para verificar la campaña
     const location = await this.locationService.getLocation(dungeon.location_id)
 
-    // Verificar que el usuario es GM de la campaña
-    const isGM = await this.campaignService.isGameMaster(userId, location.campaign_id)
-    if (!isGM) {
-      throw ErrorService.create(ErrorCode.FORBIDDEN, "Only Game Masters can create dungeon rooms")
-    }
+    // Verificar que el usuario es GM de la campaña usando helper centralizado
+    await PermissionUtils.ensureGameMaster(userId, location.campaign_id)
 
     return this.dungeonRoomRepo.create(room)
   }
@@ -190,11 +178,8 @@ export class DungeonService {
     // Obtener la location para verificar la campaña
     const location = await this.locationService.getLocation(dungeon.location_id)
 
-    // Verificar que el usuario es GM de la campaña
-    const isGM = await this.campaignService.isGameMaster(userId, location.campaign_id)
-    if (!isGM) {
-      throw ErrorService.create(ErrorCode.FORBIDDEN, "Only Game Masters can update dungeon rooms")
-    }
+    // Verificar que el usuario es GM de la campaña usando helper centralizado
+    await PermissionUtils.ensureGameMaster(userId, location.campaign_id)
 
     return this.dungeonRoomRepo.update(roomId, updates)
   }
@@ -221,11 +206,8 @@ export class DungeonService {
     // Obtener la location para verificar la campaña
     const location = await this.locationService.getLocation(dungeon.location_id)
 
-    // Verificar que el usuario es GM de la campaña
-    const isGM = await this.campaignService.isGameMaster(userId, location.campaign_id)
-    if (!isGM) {
-      throw ErrorService.create(ErrorCode.FORBIDDEN, "Only Game Masters can delete dungeon rooms")
-    }
+    // Verificar que el usuario es GM de la campaña usando helper centralizado
+    await PermissionUtils.ensureGameMaster(userId, location.campaign_id)
 
     return this.dungeonRoomRepo.delete(roomId)
   }
@@ -271,11 +253,8 @@ export class DungeonService {
     // Obtener la location para verificar la campaña
     const location = await this.locationService.getLocation(dungeon.location_id)
 
-    // Verificar que el usuario es GM de la campaña
-    const isGM = await this.campaignService.isGameMaster(userId, location.campaign_id)
-    if (!isGM) {
-      throw ErrorService.create(ErrorCode.FORBIDDEN, "Only Game Masters can associate NPCs to dungeon rooms")
-    }
+    // Verificar que el usuario es GM de la campaña usando helper centralizado
+    await PermissionUtils.ensureGameMaster(userId, location.campaign_id)
 
     // Crear la asociación usando Supabase directamente
     const { createBrowserClient } = await import("@/lib/supabase/client")
@@ -313,11 +292,8 @@ export class DungeonService {
     // Obtener la location para verificar la campaña
     const location = await this.locationService.getLocation(dungeon.location_id)
 
-    // Verificar que el usuario es GM de la campaña
-    const isGM = await this.campaignService.isGameMaster(userId, location.campaign_id)
-    if (!isGM) {
-      throw ErrorService.create(ErrorCode.FORBIDDEN, "Only Game Masters can disassociate NPCs from dungeon rooms")
-    }
+    // Verificar que el usuario es GM de la campaña usando helper centralizado
+    await PermissionUtils.ensureGameMaster(userId, location.campaign_id)
 
     // Eliminar la asociación usando Supabase directamente
     const { createBrowserClient } = await import("@/lib/supabase/client")

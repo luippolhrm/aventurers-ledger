@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useState, useEffect, useMemo, type ReactNode } from "react"
 import type { User } from "@supabase/supabase-js"
+import { createBrowserClient } from "@/lib/supabase/client"
 import { AuthService } from "@/lib/application/services"
 import { ProfileService } from "@/lib/application/services"
 import type { Profile } from "@/lib/infrastructure/repositories"
@@ -19,6 +20,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [profile, setProfile] = useState<Profile | null>(null)
   const [loading, setLoading] = useState(true)
 
+  const supabase = useMemo(() => createBrowserClient(), [])
   const authService = useMemo(() => new AuthService(), [])
   const profileService = useMemo(() => new ProfileService(), [])
 
@@ -66,10 +68,46 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     loadSession()
 
+    // Escuchar cambios en la autenticación (sign in, sign out, token refresh)
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (!isMounted) return
+
+      console.log("[v0] Auth state changed:", event)
+
+      if (session?.user) {
+        setUser(session.user)
+
+        // Cargar perfil cuando hay sesión
+        try {
+          const profileData = await profileService.getProfile(session.user.id)
+          if (isMounted) {
+            setProfile(profileData)
+          }
+        } catch (error) {
+          console.error("[v0] Error loading profile on auth change:", error)
+          if (isMounted) {
+            setProfile(null)
+          }
+        }
+      } else {
+        // Limpiar estado cuando no hay sesión
+        setUser(null)
+        setProfile(null)
+      }
+
+      // Asegurar que loading esté en false después del cambio
+      if (isMounted) {
+        setLoading(false)
+      }
+    })
+
     return () => {
       isMounted = false
+      subscription.unsubscribe()
     }
-  }, [authService, profileService])
+  }, [authService, profileService, supabase])
 
   return <AuthContext.Provider value={{ user, profile, loading }}>{children}</AuthContext.Provider>
 }

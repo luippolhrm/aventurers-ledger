@@ -15,7 +15,7 @@ import {
 import type { CampaignMemberWithDetails } from "@/lib/infrastructure/repositories/campaign-repository.types"
 import type { Character } from "@/lib/infrastructure/repositories/character-repository"
 import { ErrorService, ErrorCode } from "@/lib/infrastructure/errors"
-import { ValidationUtils } from "../utils/validation"
+import { ValidationUtils, PermissionUtils } from "../utils"
 import { CharacterService } from "./character-service"
 
 /**
@@ -115,11 +115,8 @@ export class CampaignService {
     ValidationUtils.validateId(campaignId, "Campaign ID")
     ValidationUtils.validateId(userId, "User ID")
 
-    // Validar que el usuario es el GM
-    const isGM = await this.memberRepo.isGameMaster(userId, campaignId)
-    if (!isGM) {
-      throw ErrorService.create(ErrorCode.CAMPAIGN_ACCESS_DENIED, "Only the Game Master can update campaigns")
-    }
+    // Validar que el usuario es el GM usando helper centralizado
+    await PermissionUtils.ensureGameMaster(userId, campaignId)
 
     return this.campaignRepo.update(campaignId, updates)
   }
@@ -147,11 +144,8 @@ export class CampaignService {
     ValidationUtils.validateId(campaignId, "Campaign ID")
     ValidationUtils.validateId(userId, "User ID")
 
-    // Validar que el usuario es el GM
-    const isGM = await this.memberRepo.isGameMaster(userId, campaignId)
-    if (!isGM) {
-      throw ErrorService.create(ErrorCode.CAMPAIGN_ACCESS_DENIED, "Only the Game Master can delete campaigns")
-    }
+    // Validar que el usuario es el GM usando helper centralizado
+    await PermissionUtils.ensureGameMaster(userId, campaignId)
 
     await this.campaignRepo.delete(campaignId)
   }
@@ -163,11 +157,8 @@ export class CampaignService {
     ValidationUtils.validateId(campaignId, "Campaign ID")
     ValidationUtils.validateId(userId, "User ID")
 
-    // Validar que el usuario es el GM
-    const isGM = await this.memberRepo.isGameMaster(userId, campaignId)
-    if (!isGM) {
-      throw ErrorService.create(ErrorCode.CAMPAIGN_ACCESS_DENIED, "Only the Game Master can generate invite codes")
-    }
+    // Validar que el usuario es el GM usando helper centralizado
+    await PermissionUtils.ensureGameMaster(userId, campaignId)
 
     return this.campaignRepo.generateInviteCode(campaignId)
   }
@@ -314,11 +305,8 @@ export class CampaignService {
     ValidationUtils.validateId(userId, "User ID")
     ValidationUtils.validateId(gmUserId, "Game Master User ID")
 
-    // Validar que el usuario que hace la acción es el GM
-    const isGM = await this.memberRepo.isGameMaster(gmUserId, campaignId)
-    if (!isGM) {
-      throw ErrorService.create(ErrorCode.CAMPAIGN_ACCESS_DENIED, "Only the Game Master can add members")
-    }
+    // Validar que el usuario que hace la acción es el GM usando helper centralizado
+    await PermissionUtils.ensureGameMaster(gmUserId, campaignId)
 
     // Verificar si el usuario ya es miembro
     const existingMember = characterId
@@ -404,11 +392,8 @@ export class CampaignService {
     ValidationUtils.validateId(memberId, "Member ID")
     ValidationUtils.validateId(gmUserId, "Game Master User ID")
 
-    // Validar que el usuario es el GM
-    const isGM = await this.memberRepo.isGameMaster(gmUserId, campaignId)
-    if (!isGM) {
-      throw ErrorService.create(ErrorCode.CAMPAIGN_ACCESS_DENIED, "Only the Game Master can update member roles")
-    }
+    // Validar que el usuario es el GM usando helper centralizado
+    await PermissionUtils.ensureGameMaster(gmUserId, campaignId)
 
     // No permitir cambiar el rol del GM
     const member = await this.memberRepo.getById(memberId)

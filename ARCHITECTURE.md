@@ -125,6 +125,34 @@ export function MyComponent() {
 
 ---
 
+## Identidad del actor y permisos sobre personajes
+
+Las mutaciones que afectan a un personaje (cartera, inventario del jugador, transferencias salientes, checkout en tienda) deben comprobar en la **capa de aplicación** que el usuario autenticado es quien puede actuar. Esto complementa las políticas **RLS** de Supabase (defensa en profundidad). Ver también [SECURITY_IMPROVEMENTS.md](./SECURITY_IMPROVEMENTS.md).
+
+### Origen del `userId`
+
+- El actor es siempre el **usuario autenticado**: `user.id` obtenido con `useAuth()` desde [`lib/auth-context.tsx`](lib/auth-context.tsx) en componentes cliente.
+- No usar un `userId` enviado en el body de una petición o en parámetros no anclados a la sesión como **fuente de verdad** para identidad.
+
+### `PermissionUtils.ensureCharacterOwner(userId, characterId)`
+
+- Ubicación: [`lib/application/utils/permissions.ts`](lib/application/utils/permissions.ts).
+- Comprueba que el personaje existe y que `characters.user_id === userId`.
+- Usar en operaciones donde **solo el dueño** debe actuar sobre ese personaje (p. ej. origen de una transferencia, checkout del carrito asociado a ese `characterId`).
+- No modifica datos: solo valida y lanza error si no coincide.
+
+### Transferencias
+
+- Contrato recomendado: `createTransfer(userId, fromCharacterId, toCharacterId, currency, amount, description?)`.
+- Regla: llamar `ensureCharacterOwner(userId, fromCharacterId)` antes de debitar al remitente. El personaje **destino** puede pertenecer a otro usuario (transferencia entre jugadores).
+
+### Carrito y compras
+
+- Los métodos que crean carrito, validan checkout o procesan compra deben recibir `userId` y validar `ensureCharacterOwner(userId, characterId)` para el personaje que compra.
+- En la UI, `characterId` proviene del **contexto de la vista** (ruta, props de página), no de un estado global de “personaje activo” arbitrario.
+
+---
+
 ## Estructura de Páginas y Navegación (Next.js App Router)
 
 ### ⚠️ Regla Estricta: NO usar Tabs para Navegación
@@ -455,6 +483,40 @@ Vistas completas de features que combinan organisms, molecules y atoms.
 
 ---
 
+## Flujo de Git, ramas y entornos
+
+El código se integra en Git de forma que **local** y **`develop`** permitan validar cambios antes de que lleguen a **`main`** (línea que suele desplegar Vercel en producción).
+
+### Ramas principales
+
+| Rama | Rol |
+|------|-----|
+| **`main`** | Código considerado **listo para producción**. Es la referencia alineada con el remoto y el despliegue estable. |
+| **`develop`** | **Integración**: aquí se fusionan features y fixes para pruebas de conjunto (manuales, CI, opcionalmente un deploy de staging asociado a esta rama). |
+
+### Ramas de trabajo (desde `main` o `develop` actualizado)
+
+| Prefijo | Uso |
+|---------|-----|
+| `feature/` | Nuevas funcionalidades o mejoras de producto. |
+| `fix/` o `bugfix/` | Correcciones de comportamiento incorrecto. |
+| `hotfix/` | Corrección urgente partiendo de `main` (producción). |
+| `chore/` / `refactor/` | Mantenimiento sin cambio funcional relevante (deps, limpieza). |
+| `release/` *(opcional)* | Congelar una versión antes del merge final a `main` (equipos que versionan con más formalidad). |
+
+Convención de nombres: **kebab-case** y descriptivo (`feature/map-filters`, `fix/wallet-validation`).
+
+### Flujo recomendado
+
+1. **Local:** desarrollo y pruebas en una rama `feature/...` o `fix/...`.
+2. **Integración:** merge (vía PR) a **`develop`**; validar de nuevo (local, tests automatizados si existen, revisión).
+3. **Producción:** cuando el bloque en `develop` esté estable, PR **`develop` → `main`**.
+4. **Release:** al pasar a `main`, opcionalmente etiquetar versión (`v1.x.y`) y documentar cambios; una rama `release/x.y` solo si el equipo necesita un período de estabilización antes del merge.
+
+`develop` no sustituye las pruebas: hay que ejecutar tests, revisar y, si aplica, usar **deploy previews** o un entorno de staging; la rama solo organiza el historial y el momento del merge.
+
+---
+
 ## Testing
 
 ### Estrategia
@@ -485,5 +547,5 @@ Vistas completas de features que combinan organisms, molecules y atoms.
 
 ---
 
-**Última actualización:** 2025-01-16  
-**Versión:** 2.1.0 (Con estructura de páginas y hooks)
+**Última actualización:** 2026-03-22  
+**Versión:** 2.2.0 (Flujo de Git, ramas y entornos)

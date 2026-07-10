@@ -1,63 +1,74 @@
-# Dungeons and Dragons calculator
+# Aventurer's Ledger (Libro del Aventurero)
 
-*Automatically synced with your [v0.app](https://v0.app) deployments*
+Gestor de mesa para partidas de **Dungeons & Dragons 5e** (soporta reglas **PHB 2014** y
+**PHB 2024**). No es una simple calculadora: cubre hojas de personaje, inventario con slots
+corporales, economía (cartera, movimientos y transferencias), campañas con roles GM/Jugador,
+construcción de mundo (ubicaciones, tiendas, mazmorras y NPCs) y comercio con carrito,
+checkout y descuentos raciales.
 
-[![Deployed on Vercel](https://img.shields.io/badge/Deployed%20on-Vercel-black?style=for-the-badge&logo=vercel)](https://vercel.com/luis-ramos-projects-256cd31a/v0-dungeons-and-dragons-calculator)
-[![Built with v0](https://img.shields.io/badge/Built%20with-v0.app-black?style=for-the-badge)](https://v0.app/chat/noRk8GDksbm)
+> **¿Retomando el proyecto o preparando el lanzamiento?**
+> Empieza por **[ESTADO_DEL_PROYECTO.md](./ESTADO_DEL_PROYECTO.md)** — estado actual del repo,
+> salud del código y checklist de despliegue.
 
-## Overview
+## Stack
 
-This repository will stay in sync with your deployed chats on [v0.app](https://v0.app).
-Any changes you make to your deployed app will be automatically pushed to this repository from [v0.app](https://v0.app).
+- **Next.js 16** (App Router) + **React 19** + TypeScript
+- **Tailwind CSS v4** + shadcn/ui (Radix) + lucide-react
+- **Supabase** — Auth, Postgres, RLS y funciones RPC
+- Desplegado en **Vercel**
 
-## Deployment
+## Documentación
 
-Your project is live at:
+| Documento | Contenido |
+|-----------|-----------|
+| [ESTADO_DEL_PROYECTO.md](./ESTADO_DEL_PROYECTO.md) | Estado actual, retomada y lanzamiento. |
+| [ARCHITECTURE.md](./ARCHITECTURE.md) | Arquitectura por capas, convenciones y flujo de Git. |
+| [FUTURE_FEATURES.md](./FUTURE_FEATURES.md) | Backlog de producto (implementado / parcial / pendiente). |
+| [SECURITY_IMPROVEMENTS.md](./SECURITY_IMPROVEMENTS.md) | Permisos, protección de rutas y sesión. |
+| [README_SHOP_ITEMS.md](./README_SHOP_ITEMS.md) | Sistema de ítems de tienda. |
 
-**[https://vercel.com/luis-ramos-projects-256cd31a/v0-dungeons-and-dragons-calculator](https://vercel.com/luis-ramos-projects-256cd31a/v0-dungeons-and-dragons-calculator)**
+## Variables de entorno
 
-## Build your app
-
-Continue building your app on:
-
-**[https://v0.app/chat/noRk8GDksbm](https://v0.app/chat/noRk8GDksbm)**
-
-## Environment Variables
-
-This project requires Supabase configuration. Create a `.env.local` file in the root directory with the following variables:
+Crea un archivo `.env.local` en la raíz:
 
 ```env
-# Supabase Configuration
+# Supabase (obligatorias)
 NEXT_PUBLIC_SUPABASE_URL=your-project-url.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key-here
+
+# IA (opcionales — sin uso activo por ahora)
+GEMINI_API_KEY=
+OPENAI_API_KEY=
 ```
 
-Get these values from your [Supabase project settings](https://app.supabase.com).
+Obtén los valores de Supabase en los [ajustes del proyecto](https://app.supabase.com).
+En producción, cárgalas en Vercel bajo **Settings → Environment Variables**.
 
-**For Vercel/Production Deployment:**
-Add these environment variables in your Vercel project settings under "Environment Variables".
+## Desarrollo local
 
-## Local Development
+Requiere **pnpm** (hay `pnpm-lock.yaml`).
 
-1. Clone this repository
-2. Install dependencies:
-   ```bash
-   npm install
-   # or
-   pnpm install
-   ```
-3. Create `.env.local` with your Supabase credentials (see above)
-4. Run the development server:
-   ```bash
-   npm run dev
-   # or
-   pnpm dev
-   ```
-5. Open [http://localhost:3000](http://localhost:3000)
+```bash
+pnpm install
+# crea tu .env.local (ver arriba)
+pnpm dev
+```
 
-## How It Works
+Abre [http://localhost:3000](http://localhost:3000).
 
-1. Create and modify your project using [v0.app](https://v0.app)
-2. Deploy your chats from the v0 interface
-3. Changes are automatically pushed to this repository
-4. Vercel deploys the latest version from this repository
+### Base de datos
+
+Las migraciones SQL están en `scripts/` y se aplican en orden numérico sobre el proyecto
+Supabase (editor SQL o CLI). Consulta las notas de aplicación (incluida la numeración
+duplicada a revisar) en [ESTADO_DEL_PROYECTO.md](./ESTADO_DEL_PROYECTO.md).
+
+## Scripts
+
+| Comando | Acción |
+|---------|--------|
+| `pnpm dev` | Servidor de desarrollo |
+| `pnpm build` | Build de producción |
+| `pnpm start` | Servir el build |
+| `pnpm lint` | ESLint con `--fix` |
+| `pnpm type-check` | Comprobación de tipos (`tsc --noEmit`) |
+| `pnpm format` | Prettier |

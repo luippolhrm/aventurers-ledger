@@ -43,6 +43,10 @@ export class ErrorService {
     // Transfer
     [ErrorCode.TRANSFER_FAILED]: "Error al transferir fondos",
     [ErrorCode.INVALID_TRANSFER_AMOUNT]: "Cantidad de transferencia inválida",
+    [ErrorCode.TRANSFER_NOT_FOUND]: "Transferencia no encontrada",
+
+    // Movement
+    [ErrorCode.MOVEMENT_NOT_FOUND]: "Movimiento no encontrado",
 
     // Auth
     [ErrorCode.INVALID_EMAIL]: "El correo electrónico no es válido",
@@ -57,6 +61,7 @@ export class ErrorService {
     [ErrorCode.UNAUTHORIZED]: "No autorizado",
     [ErrorCode.FORBIDDEN]: "Acceso prohibido",
     [ErrorCode.NOT_FOUND]: "Recurso no encontrado",
+    [ErrorCode.INTERNAL_ERROR]: "Error interno",
     [ErrorCode.UNKNOWN_ERROR]: "Error desconocido",
   }
 

@@ -233,7 +233,7 @@ export function InventoryEquippedView({ characterId, campaignId, language }: Inv
               <div className="flex items-center gap-4 mt-2 text-sm text-muted-foreground">
                 <span>{character.race}</span>
                 <span>•</span>
-                <span>{character.class_name || "Clase no definida"}</span>
+                <span>{character.class || "Clase no definida"}</span>
                 {attunedItemsCount > 0 && (
                   <>
                     <span>•</span>

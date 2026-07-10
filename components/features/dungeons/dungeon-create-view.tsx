@@ -104,7 +104,7 @@ export function DungeonCreateView({ campaignId, locationId }: DungeonCreateViewP
   }
 
   const getDifficultyLabel = (level: string) => {
-    return t.marketplace?.difficultyLevels?.[level] || level
+    return t.marketplace?.difficultyLevels?.[level as keyof typeof t.marketplace.difficultyLevels] || level
   }
 
   const getSelectedDifficultyInfo = () => {

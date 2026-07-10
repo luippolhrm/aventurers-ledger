@@ -143,7 +143,7 @@ export function WorldSettingsView({ campaignId }: WorldSettingsViewProps) {
   }
 
   const getLocationTypeLabel = (type: string) => {
-    return t.marketplace?.locationTypes?.[type] || type
+    return t.marketplace?.locationTypes?.[type as keyof typeof t.marketplace.locationTypes] || type
   }
 
   if (loading) {

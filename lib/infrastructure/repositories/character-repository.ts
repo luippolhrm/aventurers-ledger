@@ -7,6 +7,7 @@ export interface Character {
   name: string
   race: string
   class?: string | null
+  description?: string | null
   level?: number | null
   gender?: string | null
   avatar_url?: string | null

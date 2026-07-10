@@ -171,7 +171,7 @@ export function UnifiedDungeonView({
                 )}
                 {dungeon.difficulty_level && (
                   <Badge variant="outline">
-                    {t.marketplace?.difficultyLevels?.[dungeon.difficulty_level] ||
+                    {t.marketplace?.difficultyLevels?.[dungeon.difficulty_level as keyof typeof t.marketplace.difficultyLevels] ||
                       dungeon.difficulty_level}
                   </Badge>
                 )}
@@ -322,7 +322,7 @@ export function UnifiedDungeonView({
                     {room.description && <CardDescription>{room.description}</CardDescription>}
                     {room.room_type && (
                       <Badge className="mt-2" variant="secondary">
-                        {t.marketplace?.roomTypes?.[room.room_type] || room.room_type}
+                        {t.marketplace?.roomTypes?.[room.room_type as keyof typeof t.marketplace.roomTypes] || room.room_type}
                       </Badge>
                     )}
                   </CardHeader>

@@ -47,7 +47,7 @@ export function DungeonRoomForm({ initialData, onSubmit, onCancel, isLoading = f
   }, [initialData])
 
   const getRoomTypeLabel = (type: string) => {
-    return t.marketplace?.roomTypes?.[type] || type
+    return t.marketplace?.roomTypes?.[type as keyof typeof t.marketplace.roomTypes] || type
   }
 
   const getSelectedRoomTypeInfo = () => {

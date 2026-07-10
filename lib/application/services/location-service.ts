@@ -9,6 +9,7 @@ import {
 import { CampaignService } from "./campaign-service"
 import { ErrorService, ErrorCode } from "@/lib/infrastructure/errors"
 import { ValidationUtils } from "../utils/validation"
+import { PermissionUtils } from "../utils/permissions"
 
 /**
  * Servicio de aplicación para gestión de ubicaciones
@@ -63,9 +64,9 @@ export class LocationService {
   async createLocation(location: CreateLocation, userId: string): Promise<Location> {
     ValidationUtils.validateNonEmptyString(location.name, "Location name")
     ValidationUtils.validateId(location.campaign_id, "Campaign ID")
+    ValidationUtils.validateId(userId, "User ID")
 
-    // Validar acceso a la campaña se hace a nivel de RLS
-    // El servicio solo valida los datos de entrada
+    await PermissionUtils.ensureGameMaster(userId, location.campaign_id)
 
     return this.locationRepo.create(location)
   }
@@ -73,8 +74,16 @@ export class LocationService {
   /**
    * Actualiza una ubicación
    */
-  async updateLocation(locationId: string, updates: UpdateLocation): Promise<Location> {
+  async updateLocation(locationId: string, updates: UpdateLocation, userId: string): Promise<Location> {
     ValidationUtils.validateId(locationId, "Location ID")
+    ValidationUtils.validateId(userId, "User ID")
+
+    const existing = await this.locationRepo.getById(locationId)
+    if (!existing) {
+      throw ErrorService.create(ErrorCode.NOT_FOUND, "Location not found")
+    }
+
+    await PermissionUtils.ensureGameMaster(userId, existing.campaign_id)
 
     if (updates.name !== undefined) {
       ValidationUtils.validateNonEmptyString(updates.name, "Location name")
@@ -86,8 +95,17 @@ export class LocationService {
   /**
    * Elimina una ubicación
    */
-  async deleteLocation(locationId: string): Promise<void> {
+  async deleteLocation(locationId: string, userId: string): Promise<void> {
     ValidationUtils.validateId(locationId, "Location ID")
+    ValidationUtils.validateId(userId, "User ID")
+
+    const existing = await this.locationRepo.getById(locationId)
+    if (!existing) {
+      throw ErrorService.create(ErrorCode.NOT_FOUND, "Location not found")
+    }
+
+    await PermissionUtils.ensureGameMaster(userId, existing.campaign_id)
+
     await this.locationRepo.delete(locationId)
   }
 }

@@ -5,12 +5,12 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Trash2, Minus, Plus } from "lucide-react"
-import type { ShoppingCartItem } from "@/lib/services/shopping-cart-service"
+import type { ShoppingCartItemWithShopItem } from "@/lib/infrastructure/repositories/shopping-cart-repository.types"
 import { useLanguage } from "@/lib/language-context"
 import { formatPriceInGold } from "@/lib/utils"
 
 interface CartItemProps {
-  item: ShoppingCartItem
+  item: ShoppingCartItemWithShopItem
   onUpdateQuantity: (cartItemId: string, quantity: number) => Promise<void>
   onRemove: (cartItemId: string) => Promise<void>
 }

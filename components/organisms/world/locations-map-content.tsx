@@ -216,7 +216,7 @@ export function LocationsMapContent({ language, campaignId: propCampaignId }: Lo
     if (!confirm(confirmMessage)) return
 
     try {
-      await services.location.deleteLocation(locationId)
+      await services.location.deleteLocation(locationId, user.id)
       setLocations(locations.filter(l => l.id !== locationId))
       
       toast({

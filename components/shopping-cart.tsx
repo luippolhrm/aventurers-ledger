@@ -57,15 +57,14 @@ export function ShoppingCartComponent({ shopId, characterId, isGm }: ShoppingCar
 
   // Función para cargar el balance actual del wallet
   const loadCurrentWalletBalance = useCallback(async () => {
-    const charId = activeCharacterId || characterId
-    if (!charId) {
+    if (!characterId) {
       setCurrentWalletBalance(null)
       return
     }
 
     try {
-      const wallet = await services.wallet.getWallet(charId)
-      const totalInCopper = await services.wallet.calculateTotalInCopper(charId)
+      const wallet = await services.wallet.getWallet(characterId)
+      const totalInCopper = await services.wallet.calculateTotalInCopper(characterId)
 
       setCurrentWalletBalance({
         totalInCopper,
@@ -81,7 +80,7 @@ export function ShoppingCartComponent({ shopId, characterId, isGm }: ShoppingCar
       console.error("[ShoppingCartComponent] Error loading wallet balance:", error)
       setCurrentWalletBalance(null)
     }
-  }, [activeCharacterId, characterId, services])
+  }, [characterId, services])
 
   // Cargar balance cuando el componente se monta o cuando cambia el personaje
   useEffect(() => {

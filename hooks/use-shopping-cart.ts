@@ -1,8 +1,13 @@
 "use client"
 
 import { useState, useEffect, useCallback, useRef } from "react"
-import { ShoppingCartService, type CartWithItems, type CheckoutResult } from "@/lib/services/shopping-cart-service"
+import {
+  ShoppingCartService,
+  type CartWithItems,
+  type CheckoutResult,
+} from "@/lib/application/services/shopping-cart-service"
 import { useToast } from "@/hooks/use-toast"
+import { useAuth } from "@/lib/auth-context"
 
 interface UseShoppingCartReturn {
   cart: CartWithItems | null
@@ -20,13 +25,13 @@ interface UseShoppingCartReturn {
 
 export function useShoppingCart(shopId: string | null, characterId: string | null): UseShoppingCartReturn {
   const { toast } = useToast()
+  const { user } = useAuth()
   const [cart, setCart] = useState<CartWithItems | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [itemCount, setItemCount] = useState(0)
   const [totalPrice, setTotalPrice] = useState(0)
 
-  // Referencia para rastrear si el componente está montado
   const isMountedRef = useRef(true)
 
   useEffect(() => {
@@ -39,10 +44,9 @@ export function useShoppingCart(shopId: string | null, characterId: string | nul
   const service = new ShoppingCartService()
 
   const loadCart = useCallback(async () => {
-    // Verificar montaje antes de actualizar estado
     if (!isMountedRef.current) return
-    
-    if (!characterId || !shopId) {
+
+    if (!user?.id || !characterId || !shopId) {
       if (isMountedRef.current) {
         setCart(null)
         setItemCount(0)
@@ -57,58 +61,21 @@ export function useShoppingCart(shopId: string | null, characterId: string | nul
     }
 
     try {
-      const cartData = await service.getCartWithItems(characterId, shopId)
-      console.log("[useShoppingCart] Cart data loaded:", {
-        hasCart: !!cartData,
-        itemsCount: cartData?.items?.length || 0,
-        items: cartData?.items?.map(item => ({
-          id: item.id,
-          quantity: item.quantity,
-          hasShopItem: !!item.shop_item,
-          shopItemName: item.shop_item?.item_name,
-        })) || [],
-      })
+      const cartData = await service.getCartWithItems(user.id, characterId, shopId)
 
-      // Calcular itemCount y totalPrice basándose en el cartData
       let calculatedCount = 0
       let calculatedTotal = 0
-      
+
       if (cartData && cartData.items && cartData.items.length > 0) {
-        // Solo contar items que tienen shop_item válido
-        // Contar artículos DISTINTOS, no la suma de cantidades
-        const validItems = cartData.items.filter(item => item.shop_item)
-        calculatedCount = validItems.length // Número de artículos distintos
-        calculatedTotal = await service.calculateCartTotal(cartData.id)
-        
-        console.log("[useShoppingCart] Calculating item count:", {
-          totalItems: cartData.items.length,
-          validItems: validItems.length,
-          itemsWithoutShopItem: cartData.items.length - validItems.length,
-          calculatedCount, // Número de artículos distintos
-          totalQuantity: validItems.reduce((sum, item) => sum + item.quantity, 0), // Suma de cantidades (solo para log)
-          items: cartData.items.map(item => ({
-            id: item.id,
-            quantity: item.quantity,
-            hasShopItem: !!item.shop_item,
-            shopItemName: item.shop_item?.item_name,
-          })),
-        })
-      } else {
-        console.log("[useShoppingCart] Cart is empty or has no items, setting count to 0")
+        const validItems = cartData.items.filter((item) => item.shop_item)
+        calculatedCount = validItems.length
+        calculatedTotal = await service.calculateCartTotal(user.id, characterId, shopId)
       }
-      
-      // Solo actualizar estado si está montado
+
       if (isMountedRef.current) {
         setCart(cartData)
         setItemCount(calculatedCount)
         setTotalPrice(calculatedTotal)
-        
-        console.log("[useShoppingCart] State updated:", {
-          hasCart: !!cartData,
-          itemCount: calculatedCount,
-          totalPrice: calculatedTotal,
-          itemsInCart: cartData?.items?.length || 0,
-        })
       }
     } catch (err: any) {
       console.error("[useShoppingCart] Error loading cart:", err)
@@ -123,34 +90,31 @@ export function useShoppingCart(shopId: string | null, characterId: string | nul
         setLoading(false)
       }
     }
-  }, [characterId, shopId])
+  }, [user?.id, characterId, shopId])
 
   useEffect(() => {
     loadCart()
   }, [loadCart])
 
-  // Escuchar cambios en el carrito desde otras instancias del hook
   useEffect(() => {
     const handleCartChange = () => {
-      // Solo actualizar si el componente está montado
       if (isMountedRef.current) {
-        console.log("[useShoppingCart] Cart changed event received, reloading...")
         loadCart()
       }
     }
-    
-    window.addEventListener('cart-changed', handleCartChange)
+
+    window.addEventListener("cart-changed", handleCartChange)
     return () => {
-      window.removeEventListener('cart-changed', handleCartChange)
+      window.removeEventListener("cart-changed", handleCartChange)
     }
   }, [loadCart])
 
   const addItem = useCallback(
     async (shopItemId: string, quantity: number): Promise<boolean> => {
-      if (!characterId || !shopId) {
+      if (!user?.id || !characterId || !shopId) {
         toast({
           title: "Error",
-          description: "Character or shop not selected",
+          description: "You must be signed in with a character and shop selected",
           variant: "destructive",
         })
         return false
@@ -159,24 +123,11 @@ export function useShoppingCart(shopId: string | null, characterId: string | nul
       setError(null)
 
       try {
-        const cartData = await service.getOrCreateCart(characterId, shopId)
-        if (!cartData) {
-          toast({
-            title: "Error",
-            description: "Failed to create cart",
-            variant: "destructive",
-          })
-          return false
-        }
-
-        const success = await service.addItemToCart(cartData.id, shopItemId, quantity)
+        const success = await service.addItemToCart(user.id, characterId, shopId, shopItemId, quantity)
         if (success) {
-          // Pequeño delay para asegurar que la BD se actualice
-          await new Promise(resolve => setTimeout(resolve, 100))
-          // Recargar el carrito
+          await new Promise((resolve) => setTimeout(resolve, 100))
           await loadCart()
-          // Notificar a otras instancias del hook para que se sincronicen
-          window.dispatchEvent(new CustomEvent('cart-changed'))
+          window.dispatchEvent(new CustomEvent("cart-changed"))
           toast({
             title: "Success",
             description: "Item added to cart",
@@ -200,23 +151,28 @@ export function useShoppingCart(shopId: string | null, characterId: string | nul
         return false
       }
     },
-    [characterId, shopId, loadCart, toast]
+    [user?.id, characterId, shopId, loadCart, toast]
   )
 
   const updateItem = useCallback(
     async (cartItemId: string, quantity: number): Promise<boolean> => {
+      if (!user?.id) {
+        toast({
+          title: "Error",
+          description: "You must be signed in",
+          variant: "destructive",
+        })
+        return false
+      }
+
       setError(null)
-      console.log("[useShoppingCart] Updating item:", { cartItemId, quantity })
 
       try {
-        const success = await service.updateCartItem(cartItemId, quantity)
+        const success = await service.updateCartItem(user.id, cartItemId, quantity)
         if (success) {
-          // Recargar inmediatamente
           await loadCart()
-          // Notificar a otras instancias del hook para que se sincronicen
-          window.dispatchEvent(new CustomEvent('cart-changed'))
+          window.dispatchEvent(new CustomEvent("cart-changed"))
         } else {
-          console.error("[useShoppingCart] Update failed")
           toast({
             title: "Error",
             description: "Failed to update item",
@@ -235,27 +191,32 @@ export function useShoppingCart(shopId: string | null, characterId: string | nul
         return false
       }
     },
-    [loadCart, toast]
+    [user?.id, loadCart, toast]
   )
 
   const removeItem = useCallback(
     async (cartItemId: string): Promise<boolean> => {
+      if (!user?.id) {
+        toast({
+          title: "Error",
+          description: "You must be signed in",
+          variant: "destructive",
+        })
+        return false
+      }
+
       setError(null)
-      console.log("[useShoppingCart] Removing item:", cartItemId)
 
       try {
-        const success = await service.removeCartItem(cartItemId)
+        const success = await service.removeCartItem(user.id, cartItemId)
         if (success) {
-          // Recargar inmediatamente
           await loadCart()
-          // Notificar a otras instancias del hook para que se sincronicen
-          window.dispatchEvent(new CustomEvent('cart-changed'))
+          window.dispatchEvent(new CustomEvent("cart-changed"))
           toast({
             title: "Success",
             description: "Item removed from cart",
           })
         } else {
-          console.error("[useShoppingCart] Remove failed")
           toast({
             title: "Error",
             description: "Failed to remove item",
@@ -274,19 +235,12 @@ export function useShoppingCart(shopId: string | null, characterId: string | nul
         return false
       }
     },
-    [loadCart, toast]
+    [user?.id, loadCart, toast]
   )
 
   const checkout = useCallback(
     async (isGm: boolean): Promise<CheckoutResult> => {
-      console.log("[useShoppingCart] Checkout called:", {
-        characterId,
-        shopId,
-        isGm,
-      })
-      
-      if (!characterId || !shopId) {
-        console.warn("[useShoppingCart] Missing character or shop ID")
+      if (!user?.id || !characterId || !shopId) {
         return { success: false, error: "Character or shop not selected" }
       }
 
@@ -294,23 +248,15 @@ export function useShoppingCart(shopId: string | null, characterId: string | nul
       setLoading(true)
 
       try {
-        console.log("[useShoppingCart] Calling service.checkoutCart...")
-        const result = await service.checkoutCart(characterId, shopId, isGm)
-        console.log("[useShoppingCart] Service checkout result:", {
-          success: result.success,
-          error: result.error,
-          purchaseIds: result.purchaseIds?.length || 0,
-        })
+        const result = await service.checkoutCart(user.id, characterId, shopId, isGm)
 
         if (result.success) {
-          console.log("[useShoppingCart] Checkout successful, reloading cart...")
           await loadCart()
           toast({
             title: "Success",
             description: "Purchase completed successfully",
           })
         } else {
-          console.error("[useShoppingCart] Checkout failed:", result.error)
           toast({
             title: "Checkout Failed",
             description: result.error || "Failed to complete purchase",
@@ -333,17 +279,17 @@ export function useShoppingCart(shopId: string | null, characterId: string | nul
         setLoading(false)
       }
     },
-    [characterId, shopId, loadCart, toast]
+    [user?.id, characterId, shopId, loadCart, toast]
   )
 
   const canCheckout = useCallback(
     async (isGm: boolean): Promise<{ canCheckout: boolean; error?: string }> => {
-      if (!characterId || !shopId) {
+      if (!user?.id || !characterId || !shopId) {
         return { canCheckout: false, error: "Character or shop not selected" }
       }
 
       try {
-        const validation = await service.validateCheckout(characterId, shopId, isGm)
+        const validation = await service.validateCheckout(user.id, characterId, shopId, isGm)
         return {
           canCheckout: validation.valid,
           error: validation.error,
@@ -356,7 +302,7 @@ export function useShoppingCart(shopId: string | null, characterId: string | nul
         }
       }
     },
-    [characterId, shopId]
+    [user?.id, characterId, shopId]
   )
 
   return {

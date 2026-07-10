@@ -83,9 +83,13 @@ export function WorldSettingsView({ campaignId }: WorldSettingsViewProps) {
 
     setUpdating(`location-${locationId}`)
     try {
-      await services.location.updateLocation(locationId, {
-        is_active: !currentValue,
-      })
+      await services.location.updateLocation(
+        locationId,
+        {
+          is_active: !currentValue,
+        },
+        user.id
+      )
       setLocations(
         locations.map((loc) =>
           loc.id === locationId ? { ...loc, is_active: !currentValue } : loc

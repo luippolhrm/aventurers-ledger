@@ -86,11 +86,15 @@ export function LocationView({ campaignId, locationId }: LocationViewProps) {
     setIsSaving(true)
     setError(null)
     try {
-      const updated = await services.location.updateLocation(locationId, {
-        name: formData.name.trim(),
-        description: formData.description || null,
-        location_type: formData.location_type,
-      })
+      const updated = await services.location.updateLocation(
+        locationId,
+        {
+          name: formData.name.trim(),
+          description: formData.description || null,
+          location_type: formData.location_type,
+        },
+        user.id
+      )
       setLocation(updated)
       setIsEditing(false)
     } catch (err: any) {
@@ -114,7 +118,7 @@ export function LocationView({ campaignId, locationId }: LocationViewProps) {
     setIsDeleting(true)
     setError(null)
     try {
-      await services.location.deleteLocation(locationId)
+      await services.location.deleteLocation(locationId, user.id)
       router.push(`/campaigns/${campaignId}`)
     } catch (err: any) {
       console.error("Error deleting location:", err)

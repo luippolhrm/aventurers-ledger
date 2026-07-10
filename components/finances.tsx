@@ -12,6 +12,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { useLanguage } from "@/lib/language-context"
 import { Coins, Plus, Minus, ArrowRight, Send, TrendingUp, AlertCircle } from "lucide-react"
 import { useServices } from "@/hooks/use-services"
+import { useAuth } from "@/lib/auth-context"
 import { LoadingState } from "@/components/molecules/loading"
 import { EmptyState } from "@/components/molecules/empty"
 import type { WalletData } from "@/lib/infrastructure/repositories"
@@ -26,6 +27,7 @@ interface FinancesProps {
 
 export function Finances({ language, characterId }: FinancesProps) {
   const { t } = useLanguage()
+  const { user } = useAuth()
 
   const [wallet, setWallet] = useState<WalletData | null>(null)
   const [movements, setMovements] = useState<MovementWithDetails[]>([])
@@ -306,9 +308,15 @@ export function Finances({ language, characterId }: FinancesProps) {
       return
     }
 
+    if (!user?.id) {
+      setMessage({ type: "error", text: t.wallet?.error || "You must be signed in" })
+      return
+    }
+
     try {
       setMessage(null)
       await services.transfer.createTransfer(
+        user.id,
         characterId,
         transferToCharacter,
         transferCurrency as "PP" | "GP" | "EP" | "SP" | "CP",

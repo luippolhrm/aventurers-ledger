@@ -68,7 +68,7 @@ export function MembersContent({ campaignId }: MembersContentProps) {
     }
 
     try {
-      await services.campaign.removeMemberFromCampaign(campaignId, member.user_id, user.id)
+      await services.campaign.removeMember(member.id, user.id, campaignId)
       await loadMembers()
     } catch (error: any) {
       console.error("Error removing member:", error)

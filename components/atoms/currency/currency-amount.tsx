@@ -26,13 +26,14 @@ export function CurrencyAmount({
   showZero = false,
   className,
 }: CurrencyAmountProps) {
-  const currencies: Array<{ type: CurrencyType; amount: number }> = [
+  const allCurrencies: Array<{ type: CurrencyType; amount: number }> = [
     { type: "PP", amount: platinum },
     { type: "GP", amount: gold },
     { type: "EP", amount: electrum },
     { type: "SP", amount: silver },
     { type: "CP", amount: copper },
-  ].filter((c) => showZero || c.amount > 0)
+  ]
+  const currencies = allCurrencies.filter((c) => showZero || c.amount > 0)
 
   if (currencies.length === 0) {
     return <span className={cn("text-muted-foreground", className)}>0 GP</span>

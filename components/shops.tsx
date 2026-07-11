@@ -82,6 +82,7 @@ export function Shops({ language, locationId, onSelectShop }: ShopsProps) {
           description: newShopDescription || null,
           shopkeeper_name: newShopkeeperName || null,
           location_id: locationId,
+          shop_type: null,
         },
         user.id
       )

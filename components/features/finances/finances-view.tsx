@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { WalletDisplay } from "@/components/molecules/wallet"
+import { WalletDisplay } from "@/components/molecules/wallet/wallet-display"
 import { LoadingState } from "@/components/molecules/loading"
 import { EmptyState } from "@/components/molecules/empty"
 import { useServices } from "@/hooks/use-services"
@@ -77,7 +77,7 @@ export function FinancesView({ characterId, language }: FinancesViewProps) {
         variant="detailed"
       />
       {/* Mantener el componente original por ahora */}
-      <Finances language={language} />
+      <Finances characterId={characterId} language={language ?? "es"} />
     </div>
   )
 }

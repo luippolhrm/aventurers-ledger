@@ -361,7 +361,7 @@ export class ShoppingCartService {
       // 7. Validar fondos suficientes
       const totalCost = await this.calculateCartTotal(userId, characterId, shopId)
       const wallet = await this.walletService.getWallet(characterId)
-      const totalInCopper = await this.walletService.calculateTotalInCopper(characterId)
+      const totalInCopper = this.walletService.calculateTotalInCopper(wallet)
 
       if (totalInCopper < totalCost) {
         return { valid: false, error: "Insufficient funds" }

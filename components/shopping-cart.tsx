@@ -64,7 +64,7 @@ export function ShoppingCartComponent({ shopId, characterId, isGm }: ShoppingCar
 
     try {
       const wallet = await services.wallet.getWallet(characterId)
-      const totalInCopper = await services.wallet.calculateTotalInCopper(characterId)
+      const totalInCopper = services.wallet.calculateTotalInCopper(wallet)
 
       setCurrentWalletBalance({
         totalInCopper,

@@ -212,7 +212,11 @@ export function Finances({ language, characterId }: FinancesProps) {
     const amountNum = Number.parseFloat(transAmount)
     if (isNaN(amountNum) || amountNum <= 0) return 0
 
-    return services.movement.calculateConversion(amountNum, transFromCurrency, transToCurrency)
+    return services.movement.calculateConversion(
+      amountNum,
+      transFromCurrency as "PP" | "GP" | "EP" | "SP" | "CP",
+      transToCurrency as "PP" | "GP" | "EP" | "SP" | "CP"
+    )
   }
 
   const handleConversion = async () => {
@@ -253,8 +257,8 @@ export function Finances({ language, characterId }: FinancesProps) {
       setMessage(null)
       await services.movement.createConversion(
         characterId,
-        transFromCurrency,
-        transToCurrency,
+        transFromCurrency as "PP" | "GP" | "EP" | "SP" | "CP",
+        transToCurrency as "PP" | "GP" | "EP" | "SP" | "CP",
         amount
       )
 

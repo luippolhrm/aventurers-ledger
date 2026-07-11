@@ -9,6 +9,7 @@ import type {
   CreateShoppingCart,
   CreateShoppingCartItem,
   UpdateShoppingCartItem,
+  CheckoutResult,
 } from "./shopping-cart-repository.types"
 
 // Re-export types
@@ -20,6 +21,7 @@ export type {
   CreateShoppingCart,
   CreateShoppingCartItem,
   UpdateShoppingCartItem,
+  CheckoutResult,
 } from "./shopping-cart-repository.types"
 
 /**

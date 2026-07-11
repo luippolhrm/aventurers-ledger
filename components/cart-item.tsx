@@ -11,8 +11,8 @@ import { formatPriceInGold } from "@/lib/utils"
 
 interface CartItemProps {
   item: ShoppingCartItemWithShopItem
-  onUpdateQuantity: (cartItemId: string, quantity: number) => Promise<void>
-  onRemove: (cartItemId: string) => Promise<void>
+  onUpdateQuantity: (cartItemId: string, quantity: number) => Promise<void | boolean>
+  onRemove: (cartItemId: string) => Promise<void | boolean>
 }
 
 function getRarityColor(rarity: string | null | undefined): string {

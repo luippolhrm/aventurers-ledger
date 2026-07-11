@@ -43,7 +43,7 @@ export function ShopCatalog({ shopId, characterId, isGm }: ShopCatalogProps) {
   const { t } = useLanguage()
   const services = useServices()
   const { user } = useAuth()
-  const { addItem, itemCount } = useShoppingCart(shopId)
+  const { addItem, itemCount } = useShoppingCart(shopId, characterId)
   const { toast } = useToast()
 
   const [items, setItems] = useState<ShopItem[]>([])
@@ -180,8 +180,8 @@ export function ShopCatalog({ shopId, characterId, isGm }: ShopCatalogProps) {
                           }
                         } catch {
                           // Si no es JSON válido, tratar como string simple solo si no está vacío
-                          if (item.properties.trim().length > 0) {
-                            properties = [item.properties]
+                          if (String(item.properties).trim().length > 0) {
+                            properties = [String(item.properties)]
                           }
                         }
                       } else if (Array.isArray(item.properties)) {

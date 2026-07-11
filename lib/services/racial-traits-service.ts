@@ -69,12 +69,12 @@ export interface BackgroundDefinition {
 }
 
 export interface AbilityScores {
-  strength?: number
-  dexterity?: number
-  constitution?: number
-  intelligence?: number
-  wisdom?: number
-  charisma?: number
+  strength?: number | null
+  dexterity?: number | null
+  constitution?: number | null
+  intelligence?: number | null
+  wisdom?: number | null
+  charisma?: number | null
 }
 
 export interface ShopBonuses {

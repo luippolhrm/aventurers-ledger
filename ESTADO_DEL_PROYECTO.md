@@ -65,25 +65,25 @@ Está prácticamente terminado y es coherente; no conviene dejarlo colgando.
 
 | Indicador | Estado | Detalle |
 |-----------|--------|---------|
-| Build de producción (`npm run build`) | ✅ **Pasa** (exit 0) | Compila y genera la app. |
-| Type-check (`npm run type-check`) | ❌ **119 errores** | Enmascarados por `ignoreBuildErrors: true` en `next.config.mjs`. |
+| Build de producción (`npm run build`) | ✅ **Pasa** (exit 0) | Compila y genera la app, con type-check activado. |
+| Type-check (`npm run type-check`) | ✅ **0 errores** | Saldados los 119 errores previos (julio 2026). |
 | Lint | Configurado (ESLint + Prettier) | No verificado en este informe. |
 
-### Sobre los 119 errores de TypeScript
-No impiden desplegar, pero son **deuda técnica real** y arriesgada (pueden ocultar bugs).
-Vienen de **refactors dejados a medias**, principalmente:
+### Deuda de TypeScript — SALDADA ✅
+Los **119 errores** que estaban enmascarados por `ignoreBuildErrors: true` se han
+resuelto por completo y ese flag ahora está en **`false`**, de modo que el build falla
+si se introduce un error de tipos (ya no se puede volver a acumular deuda en silencio).
 
-1. **Sistema de i18n / traducciones incompleto.** Muchos errores del tipo
-   `Property 'language' does not exist on type 'LanguageContextType'` y claves de traducción
-   que faltan (`loggingIn`, `signInWithGoogle`, `selectCharacterDescription`, `common`…).
-   El soporte multi-idioma se empezó pero no se cerró; la app funciona en español.
-2. **Componente `EmptyState` cambió de API** (ya no acepta `children`) pero hay muchas
-   páginas que lo siguen usando con la firma antigua.
-3. **Desajustes de tipos de dominio**: `Character` sin `description`/`is_gm`/`is_player`,
-   tamaño `"huge"` no contemplado en algunas firmas, `CurrencyType` vs `string`, etc.
+Origen (refactors que se habían dejado a medias) y cómo se cerraron:
 
-**Decisión pendiente para el equipo:** o se pone `ignoreBuildErrors: false` y se saldan los
-errores (recomendado antes de un lanzamiento serio), o se asume conscientemente la deuda.
+1. **i18n / traducciones**: se expuso `language` en `LanguageContextType`, se eliminaron
+   objetos duplicados en `texts.ts` y se añadieron las claves faltantes.
+2. **`EmptyState`**: el componente ahora acepta `children` e `icon` opcional.
+3. **Tipos de dominio**: `AbilityScores` unificado a `number | null`, `Character.class`
+   (antes `class_name`), `description` opcional, tamaño `"huge"`, `CheckoutResult`
+   exportado, `CreateLocation`/`CreateShop` completos, y varios casts de moneda.
+4. **Bug latente corregido de paso**: el dashboard filtraba GM/jugador por campos
+   (`is_gm`/`is_player`) que nunca se asignaban; ahora deriva el rol de `game_master_id`.
 
 ---
 
@@ -146,9 +146,9 @@ Fuente de verdad detallada: [`FUTURE_FEATURES.md`](./FUTURE_FEATURES.md). Resume
 4. **Cerrar el WIP:** revisar `git diff`, aplicar el script `076_process_purchase_shop_discount.sql`
    en Supabase, probar una compra con descuento y **commitear** el bloque (§2).
 5. **Limpiar numeración SQL** (§7): hay números duplicados (`076`, `083`).
-6. *(Opcional pero recomendado)* Empezar a saldar los errores de TypeScript por bloques
-   (primero el i18n, luego `EmptyState`, luego tipos de dominio).
-7. Eliminar la ruta de desarrollo `app/(app)/test-services/` antes de producción.
+6. Eliminar la ruta de desarrollo `app/(app)/test-services/` antes de producción.
+
+> Nota: la deuda de TypeScript (119 errores) ya está saldada y el build valida tipos.
 
 ---
 
@@ -181,7 +181,7 @@ OPENAI_API_KEY=...                  # Solo si se activa IA (hoy sin uso)
 - [ ] Build command `next build` (ya configurado). Imágenes en modo `unoptimized`.
 
 ### d) Antes de abrir al público (recomendado)
-- [ ] Decidir sobre `ignoreBuildErrors` / saldar TS (§3).
+- [x] ~~Saldar TS / `ignoreBuildErrors`~~ — hecho: 0 errores y validación activada.
 - [ ] Quitar `app/(app)/test-services/`.
 - [ ] Revisar RLS de cada tabla con datos de usuario (personajes, wallets, inventario, carritos).
 - [ ] Probar el flujo end-to-end: registro → crear personaje → crear campaña → unirse →
@@ -193,7 +193,7 @@ OPENAI_API_KEY=...                  # Solo si se activa IA (hoy sin uso)
 
 | Riesgo | Impacto | Mitigación |
 |--------|---------|------------|
-| 119 errores de TS ocultos por `ignoreBuildErrors` | Bugs silenciosos en runtime | Saldar por bloques; poner el flag en `false`. |
+| ~~119 errores de TS ocultos~~ | — | ✅ Resuelto: 0 errores y `ignoreBuildErrors: false`. |
 | Numeración SQL duplicada (`076`, `083`) | Migraciones aplicadas en orden incorrecto | Renumerar y documentar orden canónico. |
 | i18n a medias | Textos rotos si se activa otro idioma | Completar o retirar el sistema de traducciones. |
 | Descuento de tienda sin commitear | Trabajo se puede perder | Commitear el WIP (§2). |

@@ -119,6 +119,7 @@ export function Locations({ language, campaignId, onSelectLocation }: LocationsP
           name: newLocationName,
           description: newLocationDescription || null,
           campaign_id: selectedCampaignId,
+          location_type: null,
         },
         user.id
       )
@@ -149,8 +150,9 @@ export function Locations({ language, campaignId, onSelectLocation }: LocationsP
   }
 
   const handleDeleteLocation = async (locationId: string) => {
+    if (!user) return
     try {
-      await services.location.deleteLocation(locationId)
+      await services.location.deleteLocation(locationId, user.id)
       setLocations(locations.filter((l) => l.id !== locationId))
     } catch (error) {
       console.error("[v0] Locations: Error deleting location:", error)

@@ -406,7 +406,7 @@ export default function TestServicesPage() {
                           </span>
                         </div>
                         <p className="text-sm text-muted-foreground">{result.message}</p>
-                        {result.data && (
+                        {!!result.data && (
                           <details className="mt-2">
                             <summary className="text-sm cursor-pointer text-muted-foreground hover:text-foreground">
                               View Data

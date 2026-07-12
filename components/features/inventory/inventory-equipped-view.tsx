@@ -67,7 +67,7 @@ export function InventoryEquippedView({ characterId, campaignId, language }: Inv
               {item.item_category === "weapon" && item.damage_dice && (
                 <div className="text-xs text-muted-foreground">
                   {(() => {
-                    const weaponOffItem = slotKey === "weapon_main" ? getItemInSlot("weapon_off") : null
+                    const weaponOffItem = slotKey === "weapon_main" ? getItemInSlot("weapon_off") ?? null : null
                     const currentDamage = getCurrentWeaponDamage(item, weaponOffItem)
                     const isTwoHanded = isVersatileWeaponTwoHanded(item, weaponOffItem)
                     
@@ -233,7 +233,7 @@ export function InventoryEquippedView({ characterId, campaignId, language }: Inv
               <div className="flex items-center gap-4 mt-2 text-sm text-muted-foreground">
                 <span>{character.race}</span>
                 <span>•</span>
-                <span>{character.class_name || "Clase no definida"}</span>
+                <span>{character.class || "Clase no definida"}</span>
                 {attunedItemsCount > 0 && (
                   <>
                     <span>•</span>
@@ -300,7 +300,7 @@ export function InventoryEquippedView({ characterId, campaignId, language }: Inv
             items={items}
             item={itemToEquip}
             selectedSlot={selectedSlot}
-            onSelect={(slotOrItemId) => {
+            onSelectSlot={(slotOrItemId) => {
               if (itemToEquip) {
                 handleEquipToSlot(itemToEquip, slotOrItemId)
               } else if (selectedSlot) {

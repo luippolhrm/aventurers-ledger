@@ -54,15 +54,18 @@ export function DashboardView({ language, onNavigate }: DashboardViewProps) {
       // Load campaigns using service
       const userCampaigns = await services.campaign.getUserCampaigns(user.id)
 
+      // El usuario es GM de las campañas cuyo game_master_id coincide con su id;
+      // getUserCampaigns solo devuelve campañas donde es miembro (GM o jugador),
+      // por lo que el resto son campañas en las que participa como jugador.
       const gmCampaigns: CampaignForDashboard[] = userCampaigns
-        .filter((c) => c.is_gm)
+        .filter((c) => c.game_master_id === user.id)
         .map((c) => ({
           ...c,
           role: "game_master",
         }))
 
       const playerCampaigns: CampaignForDashboard[] = userCampaigns
-        .filter((c) => c.is_player && !c.is_gm)
+        .filter((c) => c.game_master_id !== user.id)
         .map((c) => ({
           ...c,
           role: "player",

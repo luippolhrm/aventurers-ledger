@@ -319,7 +319,7 @@ export class SupabaseCampaignMemberRepository implements CampaignMemberRepositor
         : Promise.resolve({ data: [], error: null })
 
     // Cargar personajes (intentar RPC primero, fallback a query directa)
-    let charactersPromise: Promise<{ data: any[] | null; error: any }>
+    let charactersPromise: PromiseLike<{ data: any[] | null; error: any }>
     if (characterIds.length > 0) {
       charactersPromise = this.supabase
         .rpc("get_campaign_character_names", {

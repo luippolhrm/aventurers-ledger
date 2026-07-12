@@ -1,6 +1,6 @@
 import { createBrowserClient } from "@/lib/supabase/client"
 import type { SupabaseClient } from "@supabase/supabase-js"
-import { ErrorService } from "@/lib/infrastructure/errors"
+import { ErrorService, ErrorCode } from "@/lib/infrastructure/errors"
 import type {
   Movement,
   MovementWithDetails,
@@ -82,7 +82,7 @@ export class SupabaseMovementRepository implements MovementRepository {
 
   async getByCharacterId(characterId: string, limit?: number): Promise<Movement[]> {
     if (!characterId || characterId.trim() === "") {
-      throw ErrorService.create("VALIDATION_ERROR", "Character ID is required")
+      throw ErrorService.create(ErrorCode.VALIDATION_ERROR, "Character ID is required")
     }
 
     let query = this.supabase
@@ -109,7 +109,7 @@ export class SupabaseMovementRepository implements MovementRepository {
     limit?: number
   ): Promise<MovementWithDetails[]> {
     if (!characterId || characterId.trim() === "") {
-      throw ErrorService.create("VALIDATION_ERROR", "Character ID is required")
+      throw ErrorService.create(ErrorCode.VALIDATION_ERROR, "Character ID is required")
     }
 
     let query = this.supabase
@@ -139,7 +139,7 @@ export class SupabaseMovementRepository implements MovementRepository {
 
   async getById(movementId: string): Promise<Movement | null> {
     if (!movementId || movementId.trim() === "") {
-      throw ErrorService.create("VALIDATION_ERROR", "Movement ID is required")
+      throw ErrorService.create(ErrorCode.VALIDATION_ERROR, "Movement ID is required")
     }
 
     const { data, error } = await this.supabase
@@ -160,7 +160,7 @@ export class SupabaseMovementRepository implements MovementRepository {
 
   async create(movement: CreateMovement): Promise<Movement> {
     if (!movement.character_id || movement.character_id.trim() === "") {
-      throw ErrorService.create("VALIDATION_ERROR", "Character ID is required")
+      throw ErrorService.create(ErrorCode.VALIDATION_ERROR, "Character ID is required")
     }
 
     const { data, error } = await this.supabase
@@ -174,7 +174,7 @@ export class SupabaseMovementRepository implements MovementRepository {
     }
 
     if (!data) {
-      throw ErrorService.create("INTERNAL_ERROR", "Failed to create movement")
+      throw ErrorService.create(ErrorCode.INTERNAL_ERROR, "Failed to create movement")
     }
 
     return this.mapToMovement(data)
@@ -182,7 +182,7 @@ export class SupabaseMovementRepository implements MovementRepository {
 
   async update(movementId: string, movement: UpdateMovement): Promise<Movement> {
     if (!movementId || movementId.trim() === "") {
-      throw ErrorService.create("VALIDATION_ERROR", "Movement ID is required")
+      throw ErrorService.create(ErrorCode.VALIDATION_ERROR, "Movement ID is required")
     }
 
     const { data, error } = await this.supabase
@@ -197,7 +197,7 @@ export class SupabaseMovementRepository implements MovementRepository {
     }
 
     if (!data) {
-      throw ErrorService.create("MOVEMENT_NOT_FOUND", "Movement not found")
+      throw ErrorService.create(ErrorCode.MOVEMENT_NOT_FOUND, "Movement not found")
     }
 
     return this.mapToMovement(data)
@@ -205,7 +205,7 @@ export class SupabaseMovementRepository implements MovementRepository {
 
   async delete(movementId: string): Promise<void> {
     if (!movementId || movementId.trim() === "") {
-      throw ErrorService.create("VALIDATION_ERROR", "Movement ID is required")
+      throw ErrorService.create(ErrorCode.VALIDATION_ERROR, "Movement ID is required")
     }
 
     const { error } = await this.supabase.from("movements").delete().eq("id", movementId)

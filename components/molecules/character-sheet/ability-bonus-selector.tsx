@@ -18,21 +18,21 @@ interface AbilityBonusSelectorProps {
   abilityScoreOptions: AbilityScore[]
   /** Bonificaciones actuales del background */
   currentBonuses: {
-    strength?: number
-    dexterity?: number
-    constitution?: number
-    intelligence?: number
-    wisdom?: number
-    charisma?: number
+    strength?: number | null
+    dexterity?: number | null
+    constitution?: number | null
+    intelligence?: number | null
+    wisdom?: number | null
+    charisma?: number | null
   }
   /** Callback cuando cambian las bonificaciones */
   onBonusesChange: (bonuses: {
-    strength?: number
-    dexterity?: number
-    constitution?: number
-    intelligence?: number
-    wisdom?: number
-    charisma?: number
+    strength?: number | null
+    dexterity?: number | null
+    constitution?: number | null
+    intelligence?: number | null
+    wisdom?: number | null
+    charisma?: number | null
   }) => void
   /** Bonificaciones sugeridas (opcional, para mostrar como referencia) */
   suggestedBonuses?: {

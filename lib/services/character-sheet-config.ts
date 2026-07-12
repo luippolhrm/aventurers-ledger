@@ -275,7 +275,7 @@ export class CharacterSheetConfigService {
    */
   static calculateCarryingCapacity(
     strength: number | null | undefined,
-    size: "small" | "medium" | "large" | null | undefined = "medium",
+    size: "small" | "medium" | "large" | "huge" | null | undefined = "medium",
     racialTraits?: string[] | null
   ): number {
     if (!strength || strength < 1) {

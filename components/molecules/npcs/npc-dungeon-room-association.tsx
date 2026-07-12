@@ -99,7 +99,7 @@ export function NpcDungeonRoomAssociation({ npcId, campaignId, isOwner, onUpdate
                     {room.description && <CardDescription>{room.description}</CardDescription>}
                     {room.room_type && (
                       <span className="inline-block mt-2 text-xs px-2 py-1 rounded-full bg-primary/10 text-primary">
-                        {t.marketplace?.roomTypes?.[room.room_type] || room.room_type}
+                        {t.marketplace?.roomTypes?.[room.room_type as keyof typeof t.marketplace.roomTypes] || room.room_type}
                       </span>
                     )}
                   </div>

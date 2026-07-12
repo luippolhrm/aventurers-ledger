@@ -1,6 +1,6 @@
 import { createBrowserClient } from "@/lib/supabase/client"
 import type { SupabaseClient } from "@supabase/supabase-js"
-import { ErrorService } from "@/lib/infrastructure/errors"
+import { ErrorService, ErrorCode } from "@/lib/infrastructure/errors"
 import type {
   Transfer,
   TransferWithDetails,
@@ -82,7 +82,7 @@ export class SupabaseTransferRepository implements TransferRepository {
 
   async getByCharacterId(characterId: string, limit?: number): Promise<Transfer[]> {
     if (!characterId || characterId.trim() === "") {
-      throw ErrorService.create("VALIDATION_ERROR", "Character ID is required")
+      throw ErrorService.create(ErrorCode.VALIDATION_ERROR, "Character ID is required")
     }
 
     let query = this.supabase
@@ -109,7 +109,7 @@ export class SupabaseTransferRepository implements TransferRepository {
     limit?: number
   ): Promise<TransferWithDetails[]> {
     if (!characterId || characterId.trim() === "") {
-      throw ErrorService.create("VALIDATION_ERROR", "Character ID is required")
+      throw ErrorService.create(ErrorCode.VALIDATION_ERROR, "Character ID is required")
     }
 
     let query = this.supabase
@@ -139,7 +139,7 @@ export class SupabaseTransferRepository implements TransferRepository {
 
   async getById(transferId: string): Promise<Transfer | null> {
     if (!transferId || transferId.trim() === "") {
-      throw ErrorService.create("VALIDATION_ERROR", "Transfer ID is required")
+      throw ErrorService.create(ErrorCode.VALIDATION_ERROR, "Transfer ID is required")
     }
 
     const { data, error } = await this.supabase
@@ -160,19 +160,19 @@ export class SupabaseTransferRepository implements TransferRepository {
 
   async create(transfer: CreateTransfer): Promise<Transfer> {
     if (!transfer.from_character_id || transfer.from_character_id.trim() === "") {
-      throw ErrorService.create("VALIDATION_ERROR", "From character ID is required")
+      throw ErrorService.create(ErrorCode.VALIDATION_ERROR, "From character ID is required")
     }
 
     if (!transfer.to_character_id || transfer.to_character_id.trim() === "") {
-      throw ErrorService.create("VALIDATION_ERROR", "To character ID is required")
+      throw ErrorService.create(ErrorCode.VALIDATION_ERROR, "To character ID is required")
     }
 
     if (transfer.from_character_id === transfer.to_character_id) {
-      throw ErrorService.create("VALIDATION_ERROR", "Cannot transfer to the same character")
+      throw ErrorService.create(ErrorCode.VALIDATION_ERROR, "Cannot transfer to the same character")
     }
 
     if (!transfer.amount || transfer.amount <= 0) {
-      throw ErrorService.create("VALIDATION_ERROR", "Amount must be greater than 0")
+      throw ErrorService.create(ErrorCode.VALIDATION_ERROR, "Amount must be greater than 0")
     }
 
     const { data, error } = await this.supabase
@@ -186,7 +186,7 @@ export class SupabaseTransferRepository implements TransferRepository {
     }
 
     if (!data) {
-      throw ErrorService.create("INTERNAL_ERROR", "Failed to create transfer")
+      throw ErrorService.create(ErrorCode.INTERNAL_ERROR, "Failed to create transfer")
     }
 
     return this.mapToTransfer(data)
@@ -194,7 +194,7 @@ export class SupabaseTransferRepository implements TransferRepository {
 
   async update(transferId: string, transfer: UpdateTransfer): Promise<Transfer> {
     if (!transferId || transferId.trim() === "") {
-      throw ErrorService.create("VALIDATION_ERROR", "Transfer ID is required")
+      throw ErrorService.create(ErrorCode.VALIDATION_ERROR, "Transfer ID is required")
     }
 
     const { data, error } = await this.supabase
@@ -209,7 +209,7 @@ export class SupabaseTransferRepository implements TransferRepository {
     }
 
     if (!data) {
-      throw ErrorService.create("TRANSFER_NOT_FOUND", "Transfer not found")
+      throw ErrorService.create(ErrorCode.TRANSFER_NOT_FOUND, "Transfer not found")
     }
 
     return this.mapToTransfer(data)
@@ -217,7 +217,7 @@ export class SupabaseTransferRepository implements TransferRepository {
 
   async delete(transferId: string): Promise<void> {
     if (!transferId || transferId.trim() === "") {
-      throw ErrorService.create("VALIDATION_ERROR", "Transfer ID is required")
+      throw ErrorService.create(ErrorCode.VALIDATION_ERROR, "Transfer ID is required")
     }
 
     const { error } = await this.supabase.from("transfers").delete().eq("id", transferId)

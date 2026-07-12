@@ -151,7 +151,7 @@ export function DungeonView({ campaignId, locationId }: DungeonViewProps) {
               )}
               {dungeon.difficulty_level && (
                 <Badge className="mt-2" variant="secondary">
-                  {t.marketplace?.difficultyLevels?.[dungeon.difficulty_level] || dungeon.difficulty_level}
+                  {t.marketplace?.difficultyLevels?.[dungeon.difficulty_level as keyof typeof t.marketplace.difficultyLevels] || dungeon.difficulty_level}
                 </Badge>
               )}
               {dungeon.is_cleared && (
@@ -208,7 +208,7 @@ export function DungeonView({ campaignId, locationId }: DungeonViewProps) {
                     {room.description && <CardDescription>{room.description}</CardDescription>}
                     {room.room_type && (
                       <Badge className="mt-2" variant="secondary">
-                        {t.marketplace?.roomTypes?.[room.room_type] || room.room_type}
+                        {t.marketplace?.roomTypes?.[room.room_type as keyof typeof t.marketplace.roomTypes] || room.room_type}
                       </Badge>
                     )}
                   </CardHeader>

@@ -44,3 +44,10 @@ export type CreateShoppingCartItem = Omit<ShoppingCartItem, "id" | "created_at" 
 
 export type UpdateShoppingCartItem = Partial<Pick<ShoppingCartItem, "quantity">>
 
+/** Resultado del proceso de checkout de un carrito */
+export interface CheckoutResult {
+  success: boolean
+  error?: string
+  purchaseIds?: string[]
+}
+

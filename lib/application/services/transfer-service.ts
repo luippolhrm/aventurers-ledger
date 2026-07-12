@@ -9,6 +9,7 @@ import { ErrorService, ErrorCode } from "@/lib/infrastructure/errors"
 import { WalletService } from "./wallet-service"
 import type { WalletData } from "@/lib/infrastructure/repositories"
 import { ValidationUtils } from "../utils/validation"
+import { PermissionUtils } from "../utils/permissions"
 
 /**
  * Servicio de aplicación para manejo de transferencias entre personajes
@@ -50,6 +51,7 @@ export class TransferService {
   /**
    * Crea una transferencia entre dos personajes
    * Valida fondos, actualiza wallets y crea el registro de transferencia
+   * @param userId ID del usuario autenticado (debe ser dueño del remitente)
    * @param fromCharacterId ID del personaje remitente
    * @param toCharacterId ID del personaje destinatario
    * @param currency Moneda a transferir
@@ -59,15 +61,19 @@ export class TransferService {
    * @throws AppError si hay un error de validación o infraestructura
    */
   async createTransfer(
+    userId: string,
     fromCharacterId: string,
     toCharacterId: string,
     currency: "PP" | "GP" | "EP" | "SP" | "CP",
     amount: number,
     description?: string | null
   ): Promise<Transfer> {
-    ValidationUtils.validateId(fromCharacterId, "From character ID")
-    ValidationUtils.validateId(toCharacterId, "To character ID")
+    ValidationUtils.validateUuid(userId, "User ID")
+    ValidationUtils.validateUuid(fromCharacterId, "From character ID")
+    ValidationUtils.validateUuid(toCharacterId, "To character ID")
     ValidationUtils.validatePositiveNumber(amount, "Amount")
+
+    await PermissionUtils.ensureCharacterOwner(userId, fromCharacterId)
 
     if (fromCharacterId === toCharacterId) {
       throw ErrorService.create(ErrorCode.VALIDATION_ERROR, "Cannot transfer to the same character")

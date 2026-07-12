@@ -83,9 +83,13 @@ export function WorldSettingsView({ campaignId }: WorldSettingsViewProps) {
 
     setUpdating(`location-${locationId}`)
     try {
-      await services.location.updateLocation(locationId, {
-        is_active: !currentValue,
-      })
+      await services.location.updateLocation(
+        locationId,
+        {
+          is_active: !currentValue,
+        },
+        user.id
+      )
       setLocations(
         locations.map((loc) =>
           loc.id === locationId ? { ...loc, is_active: !currentValue } : loc
@@ -139,7 +143,7 @@ export function WorldSettingsView({ campaignId }: WorldSettingsViewProps) {
   }
 
   const getLocationTypeLabel = (type: string) => {
-    return t.marketplace?.locationTypes?.[type] || type
+    return t.marketplace?.locationTypes?.[type as keyof typeof t.marketplace.locationTypes] || type
   }
 
   if (loading) {

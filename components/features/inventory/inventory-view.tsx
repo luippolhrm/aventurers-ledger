@@ -604,7 +604,7 @@ export function InventoryView({ language, characterId, campaignId }: InventoryVi
                 <CarryingCapacityDisplay
                   currentWeight={items.reduce((sum, item) => sum + item.weight * item.quantity, 0)}
                   maxCapacity={character.carrying_capacity}
-                  language={language}
+                  language={language ?? "es"}
                 />
               )}
 

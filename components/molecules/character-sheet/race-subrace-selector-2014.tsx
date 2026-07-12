@@ -24,12 +24,12 @@ interface RaceSubraceSelector2014Props {
   onRaceChange: (raceId: string) => void
   onSubraceChange: (subraceId: string | null) => void
   onBonusesChange: (bonuses: {
-    strength?: number
-    dexterity?: number
-    constitution?: number
-    intelligence?: number
-    wisdom?: number
-    charisma?: number
+    strength?: number | null
+    dexterity?: number | null
+    constitution?: number | null
+    intelligence?: number | null
+    wisdom?: number | null
+    charisma?: number | null
   }) => void
 }
 

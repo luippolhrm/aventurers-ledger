@@ -260,7 +260,7 @@ export class ItemFormConfigService {
             helpText: "Efectos especiales, bonificadores, habilidades, etc.",
           },
         ],
-        getConditionalFields: (formData) => {
+        getConditionalFields: (formData: any) => {
           // Si es un anillo, sugerir slots de anillo
           if (formData.wondrous_type === "ring") {
             return [

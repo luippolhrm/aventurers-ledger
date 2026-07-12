@@ -21,6 +21,22 @@ export class ValidationUtils {
   }
 
   /**
+   * Valida formato UUID (incl. variantes estándar de Supabase / gen_random_uuid)
+   */
+  static validateUuid(id: string | null | undefined, fieldName: string = "ID"): void {
+    this.validateId(id, fieldName)
+    const trimmed = id!.trim()
+    const uuidRegex =
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+    if (!uuidRegex.test(trimmed)) {
+      throw ErrorService.create(
+        ErrorCode.VALIDATION_ERROR,
+        `${fieldName} must be a valid UUID`
+      )
+    }
+  }
+
+  /**
    * Valida que un número sea positivo (mayor que 0)
    * @param amount Número a validar
    * @param fieldName Nombre del campo para el mensaje de error

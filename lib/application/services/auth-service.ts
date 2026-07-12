@@ -140,7 +140,7 @@ export class AuthService {
     const { error } = await this.supabase.auth.signOut()
 
     if (error) {
-      throw ErrorService.fromSupabaseError(error)
+      throw ErrorService.fromUnknownError(error)
     }
   }
 
@@ -180,7 +180,7 @@ export class AuthService {
     })
 
     if (error) {
-      throw ErrorService.fromSupabaseError(error)
+      throw ErrorService.fromUnknownError(error)
     }
   }
 
@@ -195,7 +195,7 @@ export class AuthService {
     } = await this.supabase.auth.getSession()
 
     if (error) {
-      throw ErrorService.fromSupabaseError(error)
+      throw ErrorService.fromUnknownError(error)
     }
 
     if (!session || !session.user) {
@@ -219,7 +219,7 @@ export class AuthService {
     } = await this.supabase.auth.getUser()
 
     if (error) {
-      throw ErrorService.fromSupabaseError(error)
+      throw ErrorService.fromUnknownError(error)
     }
 
     return user

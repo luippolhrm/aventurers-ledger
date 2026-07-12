@@ -1,11 +1,12 @@
 "use client"
 
+import type { ReactNode } from "react"
 import { LucideIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 
 interface EmptyStateProps {
-  icon: LucideIcon
+  icon?: LucideIcon
   title: string
   description?: string
   action?: {
@@ -13,6 +14,8 @@ interface EmptyStateProps {
     onClick: () => void
   }
   className?: string
+  /** Contenido extra (p. ej. un botón de acción personalizado) renderizado al final */
+  children?: ReactNode
 }
 
 /**
@@ -25,6 +28,7 @@ export function EmptyState({
   description,
   action,
   className,
+  children,
 }: EmptyStateProps) {
   return (
     <div
@@ -33,9 +37,11 @@ export function EmptyState({
         className
       )}
     >
-      <div className="rounded-full bg-muted p-4">
-        <Icon className="w-8 h-8 text-muted-foreground" />
-      </div>
+      {Icon && (
+        <div className="rounded-full bg-muted p-4">
+          <Icon className="w-8 h-8 text-muted-foreground" />
+        </div>
+      )}
       <div className="space-y-2">
         <h3 className="font-semibold text-lg">{title}</h3>
         {description && (
@@ -49,6 +55,7 @@ export function EmptyState({
           {action.label}
         </Button>
       )}
+      {children}
     </div>
   )
 }

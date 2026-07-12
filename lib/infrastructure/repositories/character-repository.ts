@@ -7,6 +7,7 @@ export interface Character {
   name: string
   race: string
   class?: string | null
+  description?: string | null
   level?: number | null
   gender?: string | null
   avatar_url?: string | null
@@ -37,21 +38,21 @@ export interface Character {
   character_background?: string | null
   // Bonificaciones de Background (D&D 2024)
   background_ability_bonuses?: {
-    strength?: number
-    dexterity?: number
-    constitution?: number
-    intelligence?: number
-    wisdom?: number
-    charisma?: number
+    strength?: number | null
+    dexterity?: number | null
+    constitution?: number | null
+    intelligence?: number | null
+    wisdom?: number | null
+    charisma?: number | null
   } | null
   // Bonificaciones de Raza (D&D 2014)
   racial_ability_bonuses?: {
-    strength?: number
-    dexterity?: number
-    constitution?: number
-    intelligence?: number
-    wisdom?: number
-    charisma?: number
+    strength?: number | null
+    dexterity?: number | null
+    constitution?: number | null
+    intelligence?: number | null
+    wisdom?: number | null
+    charisma?: number | null
   } | null
   // Subraza (D&D 2014)
   subrace?: string | null

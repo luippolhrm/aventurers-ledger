@@ -1,6 +1,6 @@
 -- ============================================================================
--- SCRIPT 076: process_purchase — alinear cobro con descuento de tienda (shop_bonuses)
--- Reemplaza la función definida en 059; mismo contrato, total en CP con
+-- SCRIPT 079: process_purchase — alinear cobro con descuento de tienda (shop_bonuses)
+-- Reemplaza la función definida en 059b; mismo contrato, total en CP con
 -- Math.round(price_in_copper * multiplier) por unidad como en shopping-cart-service.ts
 -- ============================================================================
 -- Esta función procesa una compra completa en una transacción atómica:

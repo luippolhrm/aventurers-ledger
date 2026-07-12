@@ -58,9 +58,9 @@ Abre [http://localhost:3000](http://localhost:3000).
 
 ### Base de datos
 
-Las migraciones SQL están en `scripts/` y se aplican en orden numérico sobre el proyecto
-Supabase (editor SQL o CLI). Consulta las notas de aplicación (incluida la numeración
-duplicada a revisar) en [ESTADO_DEL_PROYECTO.md](./ESTADO_DEL_PROYECTO.md).
+Las migraciones SQL están en `scripts/` y se aplican **en orden alfabético de nombre**
+sobre el proyecto Supabase (editor SQL o CLI). El orden canónico, el historial de
+renombrados y la política para nuevos scripts están en [scripts/README.md](./scripts/README.md).
 
 ## Scripts
 

@@ -37,13 +37,14 @@ aplicar las migraciones SQL pendientes y decidir qué hacer con la deuda de tipo
 - Ramas viejas que se pueden limpiar: `refactor/move-services-to-application`,
   `remotes/origin/react-jsx-ed61d`.
 
-### ⚠️ Trabajo sin commitear (Work In Progress)
-Hay cambios en el árbol de trabajo que **no están guardados en Git**. Todos giran en torno a
-**una misma feature: alinear el descuento racial de tienda entre la app y la base de datos.**
+### ✅ Trabajo en curso — ya commiteado
+El WIP que existía al redactar este informe quedó **commiteado y pusheado** (commit
+`bb806c2`, julio 2026). Giraba en torno a **alinear el descuento racial de tienda entre
+la app y la base de datos**:
 
 | Archivo | Rol en el WIP |
 |---------|---------------|
-| `scripts/076_process_purchase_shop_discount.sql` *(nuevo)* | Reescribe la función RPC `process_purchase` de Postgres para aplicar el descuento (`characters.shop_bonuses.discount_percent`) **igual que la capa TS**. Antes divergían: el frontend aplicaba descuento pero la BD cobraba precio completo. |
+| `scripts/079_process_purchase_shop_discount.sql` *(antes `076_…`)* | Reescribe la función RPC `process_purchase` de Postgres para aplicar el descuento (`characters.shop_bonuses.discount_percent`) **igual que la capa TS**. Antes divergían: el frontend aplicaba descuento pero la BD cobraba precio completo. |
 | `lib/application/services/shopping-cart-service.ts` | Lógica de cálculo del carrito con descuento (+129/-… líneas). |
 | `hooks/use-shopping-cart.ts` | Hook de carrito reescrito (~166 líneas cambiadas). |
 | `components/cart-item.tsx`, `components/shopping-cart.tsx`, `components/finances.tsx` | UI de carrito/precios. |
@@ -143,9 +144,10 @@ Fuente de verdad detallada: [`FUTURE_FEATURES.md`](./FUTURE_FEATURES.md). Resume
 1. **Instalar dependencias:** `pnpm install` (el proyecto usa `pnpm`, hay `pnpm-lock.yaml`).
 2. **Configurar entorno:** crear/verificar `.env.local` con las 4 variables (§7).
 3. **Levantar en local:** `pnpm dev` → http://localhost:3000
-4. **Cerrar el WIP:** revisar `git diff`, aplicar el script `076_process_purchase_shop_discount.sql`
-   en Supabase, probar una compra con descuento y **commitear** el bloque (§2).
-5. **Limpiar numeración SQL** (§7): hay números duplicados (`076`, `083`).
+4. ~~Cerrar el WIP~~ ✅ hecho — falta **aplicar `079_process_purchase_shop_discount.sql`
+   en Supabase** y probar una compra con descuento.
+5. ~~Limpiar numeración SQL~~ ✅ hecho — ver [`scripts/README.md`](./scripts/README.md)
+   (orden canónico, mapeo de renombrados y política para nuevos scripts).
 6. Eliminar la ruta de desarrollo `app/(app)/test-services/` antes de producción.
 
 > Nota: la deuda de TypeScript (119 errores) ya está saldada y el build valida tipos.
@@ -156,12 +158,11 @@ Fuente de verdad detallada: [`FUTURE_FEATURES.md`](./FUTURE_FEATURES.md). Resume
 
 ### a) Supabase
 - [ ] Crear proyecto Supabase (o usar el existente de `.env.local`).
-- [ ] **Aplicar las 92 migraciones SQL de `scripts/` en orden numérico.** ⚠️ Cuidado:
-  - Hay **números duplicados**: dos `076` (`076_add_location_is_active.sql` y
-    `076_process_purchase_shop_discount.sql`) y dos `083`. Definir el orden real de aplicación
-    y, mejor aún, **renumerar** para evitar ambigüedad.
-  - `debug_wallet_issue.sql` es un script de depuración, **no** una migración: no aplicarlo en prod.
-  - No hay runner automático de migraciones; se aplican manualmente (SQL editor de Supabase o CLI).
+- [ ] **Aplicar las migraciones SQL de `scripts/` en orden alfabético de nombre.**
+  Ver [`scripts/README.md`](./scripts/README.md): la numeración duplicada ya se resolvió
+  (sufijos `b`/`c` y renumeración `076→079`, `083→084`) y los scripts de diagnóstico
+  (solo lectura) están separados en `scripts/diagnostics/` — esos no se aplican en prod.
+  No hay runner automático; se aplican manualmente (SQL editor de Supabase o CLI).
 - [ ] Verificar que las políticas **RLS** y las funciones RPC (`process_purchase`,
   `calculate_wallet_deduction`, `get_campaign_members`, etc.) quedaron creadas.
 
@@ -194,7 +195,7 @@ OPENAI_API_KEY=...                  # Solo si se activa IA (hoy sin uso)
 | Riesgo | Impacto | Mitigación |
 |--------|---------|------------|
 | ~~119 errores de TS ocultos~~ | — | ✅ Resuelto: 0 errores y `ignoreBuildErrors: false`. |
-| Numeración SQL duplicada (`076`, `083`) | Migraciones aplicadas en orden incorrecto | Renumerar y documentar orden canónico. |
+| ~~Numeración SQL duplicada~~ | — | ✅ Resuelto: sufijos `b`/`c`, `076→079`, `083→084`; orden canónico en `scripts/README.md`. |
 | i18n a medias | Textos rotos si se activa otro idioma | Completar o retirar el sistema de traducciones. |
 | Descuento de tienda sin commitear | Trabajo se puede perder | Commitear el WIP (§2). |
 | Enforcement de capacidad de carga solo informativo | Reglas no se aplican | Ver FUTURE_FEATURES (parcial). |
